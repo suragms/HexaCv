@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +21,17 @@ import { exportResumeToPDF, exportResumeToDOCX } from '@/lib/pdfExport';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 
+const WIZARD_STEPS = [
+  { id: 1, label: 'Contact', key: 'header', icon: User },
+  { id: 2, label: 'Summary', key: 'summary', icon: AlignLeft },
+  { id: 3, label: 'Skills', key: 'skills', icon: Code },
+  { id: 4, label: 'Experience', key: 'experience', icon: Briefcase },
+  { id: 5, label: 'Projects', key: 'projects', icon: Folder },
+  { id: 6, label: 'Education', key: 'education', icon: GraduationCap },
+  { id: 7, label: 'Credentials', key: 'certifications', icon: Award },
+  { id: 8, label: 'Review', key: 'achievements', icon: Trophy },
+];
+
 interface ResumeEditorProps {
   resume: Resume;
   onUpdate: (resume: Resume) => void;
@@ -35,6 +46,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
   const [isTabsListCollapsed, setIsTabsListCollapsed] = useState<boolean>(false);
+  const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
   // History stack for Undo/Redo
   const [history, setHistory] = useState<Resume[]>([]);
@@ -281,261 +293,104 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-      {/* LEFT PANEL - Settings & Score & Section Visibility */}
-      <div className={cn(
-        "col-span-12 lg:col-span-3 space-y-4 overflow-y-auto max-h-[calc(100vh-160px)] pr-1 transition-all duration-300",
-        isLeftPanelCollapsed && "lg:hidden"
-      )}>
-        {/* Document Settings */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-4 bg-white rounded-xl">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 text-sm">Design & Template</h3>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-              autoSaveStatus === 'saved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100 animate-pulse'
-            }`}>
-              <CheckCircle2 className="w-3 h-3" />
-              {autoSaveStatus === 'saved' ? 'Saved' : 'Saving...'}
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Layout</Label>
-              <div className="text-xs font-semibold text-emerald-800 bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-100">
-                Exclusive ATS Layout (Emerald Highlights)
-              </div>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full font-sans text-slate-800">
+      {/* LEFT COLUMN - Edit Form with Guided Step Stepper */}
+      <div className="col-span-12 lg:col-span-7 flex flex-col gap-4 h-full">
+        {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100 shrink-0">
+              <Sparkles className="w-4.5 h-4.5 text-emerald-600" />
             </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Job Description</Label>
+            <div>
+              <h2 className="font-bold text-slate-800 text-sm">Resume Builder Editor</h2>
+              <p className="text-[10px] text-slate-500 font-medium">Progress saved automatically</p>
+            </div>
+          </div>
+          
+          {/* Quick Layout Controls on Header */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1 px-2.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Layout:</span>
+              <span className="text-[11px] font-extrabold text-slate-700">Exclusive ATS (Emerald)</span>
+            </div>
+            
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="quick-job-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Target Job:</Label>
               <Select value={selectedJob} onValueChange={(v) => {
                 setSelectedJob(v);
                 updateResumeData({ ...resume, jobDescriptionId: v });
               }}>
-                <SelectTrigger className="h-9 rounded-lg border-slate-200">
+                <SelectTrigger id="quick-job-select" className="h-8 text-xs font-semibold rounded-lg border-slate-200 bg-white min-w-[140px] max-w-[180px]">
                   <SelectValue placeholder="Select target..." />
                 </SelectTrigger>
                 <SelectContent>
                   {PRESET_JOBS.map(j => (
-                    <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
+                    <SelectItem key={j.id} value={j.id} className="text-xs">{j.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div className="flex gap-2 border-t border-slate-100 pt-3">
-            <Button variant="outline" size="sm" className="h-8 gap-1 text-xs font-semibold flex-1 border-slate-200 rounded-lg animate-fade-in" onClick={handleUndo} disabled={historyIndex <= 0}>
-              <Undo className="w-3.5 h-3.5" />
-              Undo
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 gap-1 text-xs font-semibold flex-1 border-slate-200 rounded-lg animate-fade-in" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>
-              <Redo className="w-3.5 h-3.5" />
-              Redo
-            </Button>
-          </div>
-        </Card>
-
-        {/* ATS Score Engine Widget */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-4 bg-white rounded-xl">
-          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5 border-b border-slate-50 pb-2">
-            <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-            ATS Optimization Score
-          </h3>
-          <div className="flex items-center gap-4">
-            <div className="relative flex items-center justify-center shrink-0">
-              <svg className="w-16 h-16 transform -rotate-90">
-                <circle cx="32" cy="32" r="28" stroke="#f1f5f9" strokeWidth="6" fill="transparent" />
-                <circle cx="32" cy="32" r="28" stroke={atsSummary.score >= 70 ? "#10b981" : atsSummary.score >= 40 ? "#f59e0b" : "#ef4444"} strokeWidth="6" fill="transparent"
-                  strokeDasharray={175} strokeDashoffset={175 - (175 * atsSummary.score) / 100} />
-              </svg>
-              <span className="absolute text-base font-extrabold text-slate-800">{atsSummary.score}</span>
+            
+            <div className="flex gap-1">
+              <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 rounded-lg" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo">
+                <Undo className="w-3.5 h-3.5 text-slate-600" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 rounded-lg" onClick={handleRedo} disabled={historyIndex >= history.length - 1} title="Redo">
+                <Redo className="w-3.5 h-3.5 text-slate-600" />
+              </Button>
             </div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-bold text-slate-800">
-                {atsSummary.score >= 70 ? 'Excellent Match!' : atsSummary.score >= 40 ? 'Moderate Match' : 'Action Required'}
-              </p>
-              <p className="text-[10px] text-slate-500 font-semibold">Keyword Alignment: {atsSummary.matchedKeywords.length} matched</p>
-              <p className="text-[10px] text-slate-500 font-semibold">Section Completeness: {atsSummary.completenessScore}%</p>
-            </div>
-          </div>
-
-          {atsSummary.suggestions.length > 0 && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1">
-              <p className="text-[10px] font-extrabold text-amber-800 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Suggestions to Improve:
-              </p>
-              <ul className="text-[10px] text-amber-700 list-disc pl-4 space-y-1 font-medium">
-                {atsSummary.suggestions.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {selectedJob && (
-            <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Keywords Details</h4>
-              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                {atsSummary.matchedKeywords.map((k, i) => (
-                  <span key={i} className="bg-emerald-50 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-md border border-emerald-100 font-semibold">
-                    {k}
-                  </span>
-                ))}
-                {atsSummary.missingKeywords.map((k, i) => (
-                  <span key={i} className="bg-red-50 text-red-800 text-[9px] px-1.5 py-0.5 rounded-md border border-red-100 line-through font-semibold">
-                    {k}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Section Visibility and Ordering */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-3 bg-white rounded-xl">
-          <h3 className="font-bold text-slate-900 text-sm border-b border-slate-50 pb-2">Sections Visibility</h3>
-          <div className="space-y-1.5">
-            {resume.sections.map((section, idx) => (
-              <div key={section.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg transition">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={section.visible}
-                    onChange={() => {
-                      const updated = resume.sections.map((s) =>
-                        s.id === section.id ? { ...s, visible: !s.visible } : s
-                      );
-                      updateResumeData({ ...resume, sections: updated });
-                    }}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
-                  />
-                  <span className="text-xs text-slate-700 capitalize font-semibold">{section.type}</span>
-                </div>
-                <div className="flex gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-slate-400 hover:text-slate-600"
-                    disabled={idx === 0}
-                    onClick={() => {
-                      const list = [...resume.sections];
-                      const temp = list[idx];
-                      list[idx] = list[idx - 1];
-                      list[idx - 1] = temp;
-                      updateResumeData({ ...resume, sections: list });
-                    }}
-                  >
-                    <ArrowUp className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-slate-400 hover:text-slate-600"
-                    disabled={idx === resume.sections.length - 1}
-                    onClick={() => {
-                      const list = [...resume.sections];
-                      const temp = list[idx];
-                      list[idx] = list[idx + 1];
-                      list[idx + 1] = temp;
-                      updateResumeData({ ...resume, sections: list });
-                    }}
-                  >
-                    <ArrowDown className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* CENTER PANEL - Edit Form (Span 5 on desktop, expands to 7 when settings are collapsed) */}
-      <div className={cn(
-        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
-        isLeftPanelCollapsed ? "lg:col-span-7" : "lg:col-span-5",
-        previewMode === 'preview' ? "hidden lg:flex" : "flex"
-      )}>
-        {/* Toggle Mode header on mobile, regular title on desktop */}
-        <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-              className="hidden lg:inline-flex border border-slate-200 h-8 w-8 text-slate-500 hover:text-slate-700 rounded-lg mr-1 hover:bg-slate-100"
-              title={isLeftPanelCollapsed ? "Show Settings Panel" : "Hide Settings Panel"}
-            >
-              {isLeftPanelCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-            </Button>
-            <h2 className="font-bold text-slate-900 text-sm hidden lg:block">Resume Editor</h2>
-            <div className="lg:hidden">
-              <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as any)} className="w-full">
-                <TabsList className="grid grid-cols-2 w-48">
-                  <TabsTrigger value="edit" className="gap-1.5 py-1.5 text-xs">
-                    <Edit3 className="w-3.5 h-3.5" />
-                    Edit Form
-                  </TabsTrigger>
-                  <TabsTrigger value="preview" className="gap-1.5 py-1.5 text-xs">
-                    <Eye className="w-3.5 h-3.5" />
-                    Live Preview
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleExportPDF} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white gap-1.5 h-9 text-xs font-semibold shadow-md hover:shadow-lg transition-all rounded-lg">
-              <Download className="w-4 h-4" />
-              Export PDF
-            </Button>
-            <Button onClick={handleExportDOCX} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-1.5 h-9 text-xs font-semibold shadow-md hover:shadow-lg transition-all rounded-lg">
-              <Download className="w-4 h-4" />
-              Export DOCX
-            </Button>
           </div>
         </div>
 
-        {/* Editor Card with vertical side-tabs */}
+        {/* Editor Card with guided steps */}
         <Card className="border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-white shadow-sm p-0 rounded-xl">
-          <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="flex flex-row w-full h-full items-stretch">
-            <TabsList className={cn(
-              "h-full border-r border-slate-100 bg-slate-50/50 p-2 flex flex-col gap-1 overflow-y-auto items-stretch justify-between rounded-none bg-transparent shrink-0 transition-all duration-300",
-              isTabsListCollapsed ? "w-[50px]" : "w-[165px]"
-            )}>
-              <div className="space-y-1 w-full">
-                {formSections.map((sec) => {
-                  const Icon = sec.icon;
-                  const isActive = activeEditTab === sec.id;
-                  return (
-                    <TabsTrigger
-                      key={sec.id}
-                      value={sec.id}
-                      title={isTabsListCollapsed ? sec.label : undefined}
-                      className={cn(
-                        "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-all justify-start border-0 shadow-none data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer w-full",
-                        isTabsListCollapsed && "justify-center px-0"
-                      )}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      {!isTabsListCollapsed && <span className="truncate">{sec.label}</span>}
-                    </TabsTrigger>
-                  );
-                })}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsTabsListCollapsed(!isTabsListCollapsed)}
-                className="h-8 w-full border-t border-slate-100 rounded-none text-slate-400 hover:text-slate-600 shrink-0 mt-2 hover:bg-slate-100/50"
-                title={isTabsListCollapsed ? "Expand Menu" : "Collapse Menu"}
-              >
-                {isTabsListCollapsed ? <PanelLeft className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
-              </Button>
-            </TabsList>
-            <div className="flex-1 p-6 overflow-y-auto h-full">
+          {/* Horizontal Stepper Progress Indicator */}
+          <div className="bg-slate-50/80 backdrop-blur-sm border-b border-slate-100 px-6 py-4 flex items-center gap-2 overflow-x-auto shrink-0 select-none">
+            {WIZARD_STEPS.map((step, idx) => {
+              const Icon = step.icon;
+              const isCompleted = WIZARD_STEPS.findIndex(s => s.key === activeEditTab) > idx;
+              const isActive = activeEditTab === step.key;
+              
+              return (
+                <div key={step.id} className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setActiveEditTab(step.key)}
+                    className={cn(
+                      "flex items-center gap-2 p-1.5 px-3 rounded-xl text-xs font-bold transition-all border outline-none",
+                      isActive 
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm scale-105" 
+                        : isCompleted 
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-250" 
+                          : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700"
+                    )}
+                  >
+                    <span className={cn(
+                      "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black border",
+                      isActive 
+                        ? "bg-white/20 border-white/30 text-white" 
+                        : isCompleted 
+                          ? "bg-emerald-100 border-emerald-200 text-emerald-800" 
+                          : "bg-slate-100 border-slate-200 text-slate-600"
+                    )}>
+                      {step.id}
+                    </span>
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{step.label}</span>
+                  </button>
+                  {idx < WIZARD_STEPS.length - 1 && (
+                    <div className={cn(
+                      "w-4 h-[2px] rounded-full shrink-0",
+                      isCompleted ? "bg-emerald-400" : "bg-slate-200"
+                    )} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="flex-1 p-6 overflow-y-auto h-full">
+            <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full h-full">
 
 
                 {/* HEADER TAB */}
@@ -1106,51 +961,156 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   </div>
                 </TabsContent>
 
-                {/* ACHIEVEMENTS TAB */}
-                <TabsContent value="achievements" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Achievements</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
-                      const cur = getSectionContent('achievements').achievements || [];
-                      updateSection('achievements', {
-                        achievements: [...cur, '']
-                      });
-                    }}>
-                      Add Achievement
-                    </Button>
+                {/* ACHIEVEMENTS & FINAL REVIEW TAB */}
+                <TabsContent value="achievements" className="space-y-6">
+                  {/* 1. Achievements Editor */}
+                  <div className="space-y-4 border-b border-slate-100 pb-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-slate-400">Achievements Highlights</h3>
+                      <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => {
+                        const cur = getSectionContent('achievements').achievements || [];
+                        updateSection('achievements', {
+                          achievements: [...cur, '']
+                        });
+                      }}>
+                        Add Achievement
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(getSectionContent('achievements').achievements || []).map((ach: string, idx: number) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <Input
+                            placeholder="e.g. Winner of national hackathon out of 500+ teams"
+                            value={ach}
+                            onChange={(e) => {
+                              const list = [...getSectionContent('achievements').achievements];
+                              list[idx] = e.target.value;
+                              updateSection('achievements', { achievements: list });
+                            }}
+                            className="h-10 rounded-xl"
+                          />
+                          <Button variant="ghost" size="sm" className="text-red-500 h-9" onClick={() => {
+                            const list = (getSectionContent('achievements').achievements || []).filter((_: any, i: number) => i !== idx);
+                            updateSection('achievements', { achievements: list });
+                          }}>
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      {(getSectionContent('achievements').achievements || []).length === 0 && (
+                        <p className="text-xs text-slate-400 italic">No achievements added. Add key milestones to stand out.</p>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    {(getSectionContent('achievements').achievements || []).map((ach: string, idx: number) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <Input
-                          placeholder="e.g. Winner of national hackathon out of 500+ teams"
-                          value={ach}
-                          onChange={(e) => {
-                            const list = [...getSectionContent('achievements').achievements];
-                            list[idx] = e.target.value;
-                            updateSection('achievements', { achievements: list });
-                          }}
-                        />
-                        <Button variant="ghost" size="sm" className="text-red-500 h-9" onClick={() => {
-                          const list = (getSectionContent('achievements').achievements || []).filter((_: any, i: number) => i !== idx);
-                          updateSection('achievements', { achievements: list });
-                        }}>
-                          Remove
+                  {/* 2. Review and Download Section */}
+                  <div className="space-y-6">
+                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-slate-400">Final Review & Export</h3>
+                    
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Detailed ATS Score Widget */}
+                      <Card className="border border-slate-200/80 shadow-sm p-4 space-y-4 bg-slate-50/50 rounded-xl">
+                        <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5 border-b border-slate-200/60 pb-2">
+                          <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
+                          ATS Score Details
+                        </h4>
+                        <div className="flex items-center gap-4">
+                          <div className="relative flex items-center justify-center shrink-0">
+                            <svg className="w-16 h-16 transform -rotate-90">
+                              <circle cx="32" cy="32" r="28" stroke="#e2e8f0" strokeWidth="6" fill="transparent" />
+                              <circle cx="32" cy="32" r="28" stroke={atsSummary.score >= 70 ? "#10b981" : atsSummary.score >= 40 ? "#f59e0b" : "#ef4444"} strokeWidth="6" fill="transparent"
+                                strokeDasharray={175} strokeDashoffset={175 - (175 * atsSummary.score) / 100} />
+                            </svg>
+                            <span className="absolute text-base font-black text-slate-800">{atsSummary.score}</span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-800">
+                              {atsSummary.score >= 70 ? 'Ready for Applications!' : atsSummary.score >= 40 ? 'Needs Improvement' : 'Urgent Actions Required'}
+                            </p>
+                            <p className="text-[10px] text-slate-500 font-semibold">Keywords: {atsSummary.matchedKeywords.length} matched</p>
+                            <p className="text-[10px] text-slate-500 font-semibold">Sections: {atsSummary.completenessScore}% filled</p>
+                          </div>
+                        </div>
+
+                        {atsSummary.suggestions.length > 0 && (
+                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1">
+                            <span className="text-[10px] font-black text-amber-800 block">Suggestions:</span>
+                            <ul className="text-[10px] text-amber-700 list-disc pl-4 space-y-1 font-medium max-h-24 overflow-y-auto font-medium">
+                              {atsSummary.suggestions.map((s, i) => (
+                                <li key={i}>{s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </Card>
+
+                      {/* Completion Panel */}
+                      <Card className="border border-slate-200/80 shadow-sm p-6 flex flex-col items-center justify-center text-center bg-white rounded-xl space-y-4 min-h-[220px]">
+                        <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 animate-pulse">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="font-bold text-slate-800 text-sm">All Sections Completed!</h4>
+                          <p className="text-[10px] text-slate-500 max-w-[240px]">
+                            You have filled in all the core information. Click "Finish & Export" to download your ATS-ready resume.
+                          </p>
+                        </div>
+                        
+                        <Button 
+                          onClick={() => setShowDownloadModal(true)} 
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all"
+                        >
+                          <Sparkles className="w-4 h-4 text-emerald-200" />
+                          Finish & Export
                         </Button>
-                      </div>
-                    ))}
+                      </Card>
+                    </div>
                   </div>
                 </TabsContent>
+            </Tabs>
+          </div>
+          
+          {/* Wizard Navigation Footer */}
+          <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-between items-center shrink-0">
+            <Button
+              variant="outline"
+              disabled={activeEditTab === 'header'}
+              onClick={() => {
+                const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
+                if (curIdx > 0) {
+                  setActiveEditTab(WIZARD_STEPS[curIdx - 1].key);
+                }
+              }}
+              className="border-slate-200 text-slate-700 hover:bg-slate-100 font-bold px-5 h-10 rounded-xl"
+            >
+              Back
+            </Button>
+            
+            <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+              Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1} of 8
             </div>
-          </Tabs>
+
+            <Button
+              onClick={() => {
+                const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
+                if (curIdx < WIZARD_STEPS.length - 1) {
+                  setActiveEditTab(WIZARD_STEPS[curIdx + 1].key);
+                } else {
+                  setShowDownloadModal(true);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 h-10 rounded-xl"
+            >
+              {activeEditTab === 'achievements' ? 'Finish & Export' : 'Next Step'}
+            </Button>
+          </div>
         </Card>
       </div>
 
-      {/* RIGHT PANEL - Live Preview */}
+      {/* RIGHT COLUMN - Live Preview */}
       <div className={cn(
-        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
-        isLeftPanelCollapsed ? "lg:col-span-5" : "lg:col-span-4",
+        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300 lg:col-span-5",
         previewMode === 'edit' ? "hidden lg:flex" : "flex"
       )}>
         {/* Toggle Mode header on mobile (hidden on desktop) */}
@@ -1172,7 +1132,53 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         {/* Live Preview Card with zoom controls */}
         <Card className="border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-white shadow-sm p-0 rounded-xl">
           <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex justify-between items-center shrink-0">
-            <span className="text-xs font-bold text-slate-700">Live Preview</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-700">Live Preview</span>
+              
+              {/* Quick ATS Badge */}
+              <div className="relative group cursor-pointer flex items-center gap-1.5 bg-white border border-slate-200 p-1 px-2.5 rounded-full shadow-sm hover:border-emerald-300 hover:bg-emerald-50/20 transition-all select-none">
+                <span className="relative flex h-2 w-2">
+                  <span className={cn(
+                    "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                    atsSummary.score >= 70 ? "bg-emerald-400" : atsSummary.score >= 40 ? "bg-amber-400" : "bg-rose-400"
+                  )}></span>
+                  <span className={cn(
+                    "relative inline-flex rounded-full h-2 w-2",
+                    atsSummary.score >= 70 ? "bg-emerald-500" : atsSummary.score >= 40 ? "bg-amber-500" : "bg-rose-500"
+                  )}></span>
+                </span>
+                <span className="text-[10px] font-black text-slate-600">ATS: {atsSummary.score}</span>
+                
+                {/* Detailed ATS tooltip popover on hover */}
+                <div className="invisible group-hover:visible absolute top-full left-0 mt-2 w-72 bg-white border border-slate-200 shadow-xl rounded-xl p-4 z-50 text-slate-700 transition-all text-left">
+                  <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1 mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                    ATS Optimization
+                  </h4>
+                  <div className="space-y-2 text-[10px]">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-slate-500">Overall Match:</span>
+                      <span className="font-bold text-slate-800">{atsSummary.score}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-slate-500">Keywords:</span>
+                      <span className="font-bold text-slate-800">{atsSummary.matchedKeywords.length} matched</span>
+                    </div>
+                    {atsSummary.suggestions.length > 0 && (
+                      <div className="bg-amber-50 text-amber-800 border border-amber-100 rounded-lg p-2 mt-1">
+                        <span className="font-bold block mb-1">Suggestions:</span>
+                        <ul className="list-disc pl-3.5 space-y-0.5 max-h-24 overflow-y-auto font-medium">
+                          {atsSummary.suggestions.map((s, i) => (
+                            <li key={i}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-1.5 items-center">
               <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200" onClick={() => setZoom(Math.max(50, zoom - 10))}>
                 <ZoomOut className="w-3.5 h-3.5 text-slate-500" />
@@ -1188,6 +1194,63 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           </div>
         </Card>
       </div>
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in">
+          <Card className="w-full max-w-lg border border-slate-200/80 shadow-2xl bg-white rounded-2xl overflow-hidden animate-scale-up">
+            {/* Header */}
+            <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 p-6 text-white text-center relative">
+              <button 
+                onClick={() => setShowDownloadModal(false)}
+                className="absolute top-4 right-4 text-white/80 hover:text-white text-lg font-bold outline-none"
+              >
+                ✕
+              </button>
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-emerald-200 animate-bounce" />
+              <h3 className="text-xl font-bold">Resume Completed!</h3>
+              <p className="text-xs text-emerald-100/90 mt-1">Your ATS-optimized resume is ready for download</p>
+            </div>
+            
+            {/* Content */}
+            <CardContent className="p-6 space-y-6">
+              <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex items-center gap-4">
+                <div className="relative flex items-center justify-center shrink-0">
+                  <svg className="w-12 h-12 transform -rotate-90">
+                    <circle cx="24" cy="24" r="20" stroke="#e2e8f0" strokeWidth="4" fill="transparent" />
+                    <circle cx="24" cy="24" r="20" stroke={atsSummary.score >= 70 ? "#10b981" : atsSummary.score >= 40 ? "#f59e0b" : "#ef4444"} strokeWidth="4" fill="transparent"
+                      strokeDasharray={125} strokeDashoffset={125 - (125 * atsSummary.score) / 100} />
+                  </svg>
+                  <span className="absolute text-xs font-black text-slate-800">{atsSummary.score}</span>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-800">ATS Match Score</span>
+                  <p className="text-[10px] text-slate-500 font-semibold">Keywords: {atsSummary.matchedKeywords.length} matched • Sections: {atsSummary.completenessScore}% filled</p>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <Button 
+                  onClick={handleExportPDF} 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 h-12 rounded-xl shadow-md transition-all flex items-center justify-center"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF Format
+                </Button>
+              </div>
+            </CardContent>
+            
+            {/* Footer */}
+            <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-end">
+              <Button 
+                variant="ghost" 
+                onClick={() => setShowDownloadModal(false)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-800 h-9 px-4 rounded-lg"
+              >
+                Back to Editor
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

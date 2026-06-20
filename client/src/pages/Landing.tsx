@@ -45,7 +45,7 @@ export default function Landing() {
                 Install App
               </Button>
             )}
-            <Link href="/dashboard">
+            <Link href="/builder">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                 Get Started
               </Button>
@@ -68,13 +68,13 @@ export default function Landing() {
               Upload your existing resume or build from scratch. Tailor your CV to any job description with AI-powered alignment. Export a polished PDF instantly.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/dashboard">
+              <Link href="/builder?mode=upload">
                 <Button size="lg" className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto gap-2">
                   Upload Resume
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <Link href="/dashboard">
+              <Link href="/builder?mode=scratch">
                 <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
                   Build from Scratch
                   <ArrowRight className="w-4 h-4" />

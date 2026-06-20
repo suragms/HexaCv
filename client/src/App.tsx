@@ -17,6 +17,8 @@ function Router() {
       <Route path="/builder" component={ResumeBuilder} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/dashboard/:sub*" component={Dashboard} />
+      <Route path="/admin" component={Dashboard} />
+      <Route path="/url" component={Dashboard} />
       <Route path="/documentation" component={Documentation} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

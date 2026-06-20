@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Route, Switch, Link, useLocation } from "wouter";
+import { Route, Switch, Link, useLocation, Redirect } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,71 +51,9 @@ export default function Dashboard() {
   return (
     <DashboardLayout>
       <Switch>
-        {/* Default dashboard tab: Resume Listing */}
+        {/* Default dashboard tab: Redirect to builder */}
         <Route path="/dashboard">
-          <div className="space-y-8 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  My Resume Documents
-                </h2>
-                <p className="text-slate-600 mt-1">
-                  Create, upload, customize, and align your CV drafts to match target criteria.
-                </p>
-              </div>
-              <Link href="/builder">
-                <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-md transition-all gap-2">
-                  <Plus className="w-4 h-4" />
-                  New Resume
-                </Button>
-              </Link>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {resumes.map((resume) => (
-                <Card key={resume.id} className="flex flex-col border border-slate-200 shadow-sm hover:shadow-md transition">
-                  <CardHeader className="pb-3 bg-slate-50/50 rounded-t-xl">
-                    <CardTitle className="text-lg text-slate-800 truncate">{resume.title}</CardTitle>
-                    <CardDescription className="text-xs">
-                      Last updated {new Date(resume.updatedAt).toLocaleDateString()}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-4 flex-grow flex items-center justify-center min-h-[120px]">
-                    <div className="text-center space-y-2">
-                      <FileText className="w-12 h-12 text-blue-400 mx-auto" />
-                      <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] uppercase tracking-wider font-bold">
-                        Exclusive ATS Layout
-                      </Badge>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="border-t border-slate-100 pt-4 flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setLocation(`/builder?edit=${resume.id}`)}
-                      size="sm"
-                      className="border-slate-200 text-slate-700 hover:bg-slate-50 text-xs flex-1"
-                    >
-                      Open Editor
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => handleDeleteResume(resume.id)}
-                      size="sm"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 text-xs shrink-0"
-                    >
-                      Delete
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-              {resumes.length === 0 && (
-                <div className="col-span-full bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-16 text-center text-slate-500 italic">
-                  <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  No resumes built yet. Click 'New Resume' or import an existing CV to begin.
-                </div>
-              )}
-            </div>
-          </div>
+          <Redirect to="/builder" />
         </Route>
 
         {/* ATS Resume compliance scanner */}
@@ -162,13 +100,13 @@ export default function Dashboard() {
 
         {/* Master CRM admin views */}
         <Route path="/dashboard/admin">
-          {user?.role === "admin" ? (
-            <AdminCRM />
-          ) : (
-            <div className="p-8 text-center text-rose-600 font-bold bg-rose-50 border border-rose-200 rounded-xl">
-              Access Denied: Admin role credentials required.
-            </div>
-          )}
+          <AdminCRM />
+        </Route>
+        <Route path="/admin">
+          <AdminCRM />
+        </Route>
+        <Route path="/url">
+          <AdminCRM />
         </Route>
       </Switch>
     </DashboardLayout>

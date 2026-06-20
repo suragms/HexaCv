@@ -7,6 +7,8 @@ import { Badge } from "./ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { ShieldCheck, Users, LifeBuoy, TrendingUp, DollarSign, CheckCircle2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 // Simulated registration and revenue historical chart metrics
 const chartData = [
@@ -20,9 +22,34 @@ const chartData = [
 ];
 
 export default function AdminCRM() {
-  const statsQuery = trpc.admin.getDashboardStats.useQuery();
-  const usersQuery = trpc.admin.getUsers.useQuery();
-  const ticketsQuery = trpc.admin.getTickets.useQuery();
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem("admin_authenticated") === "true";
+  });
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === "hexacv@2026$") {
+      setIsAuthenticated(true);
+      sessionStorage.setItem("admin_authenticated", "true");
+      setError("");
+      toast.success("Access Granted. Welcome, Admin!");
+    } else {
+      setError("Access Denied: Invalid administrative passcode.");
+      toast.error("Invalid passcode.");
+    }
+  };
+
+  const statsQuery = trpc.admin.getDashboardStats.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const usersQuery = trpc.admin.getUsers.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const ticketsQuery = trpc.admin.getTickets.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   const resolveTicketMutation = trpc.admin.resolveTicket.useMutation();
 
@@ -46,6 +73,58 @@ export default function AdminCRM() {
     pdfDownloads: 0,
     subscriptionRevenue: 0,
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-4 animate-fade-in">
+        <Card className="w-full max-w-md border border-slate-200/80 shadow-2xl bg-white/70 backdrop-blur-md rounded-2xl overflow-hidden">
+          <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-blue-950 p-8 text-white text-center relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-xl" />
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-blue-500/10 rounded-full blur-xl" />
+            
+            <ShieldCheck className="w-16 h-16 mx-auto mb-3 text-indigo-400 drop-shadow-[0_0_8px_rgba(129,140,248,0.5)] animate-pulse" />
+            <h3 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
+              HexaCv Administrative Portal
+            </h3>
+            <p className="text-xs text-indigo-200/80 mt-2 font-medium">
+              Protected Environment • Restricted Access
+            </p>
+          </div>
+          <CardContent className="p-8 space-y-6">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="admin-passcode" className="text-slate-700 font-bold text-xs uppercase tracking-wider">
+                  Master Administrative Passcode
+                </Label>
+                <Input
+                  id="admin-passcode"
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-center font-mono text-lg tracking-widest shadow-inner bg-slate-50/50"
+                  autoFocus
+                />
+              </div>
+              
+              {error && (
+                <div className="text-xs text-rose-600 font-semibold bg-rose-50 border border-rose-100 rounded-lg p-3 text-center animate-shake">
+                  {error}
+                </div>
+              )}
+              
+              <Button 
+                type="submit" 
+                className="w-full h-11 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-700 hover:to-blue-800 text-white font-bold shadow-md hover:shadow-lg transition-all"
+              >
+                Verify Credentials
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">

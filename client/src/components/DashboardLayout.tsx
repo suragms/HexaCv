@@ -30,7 +30,7 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: FileText, label: "My Resumes", path: "/dashboard" },
+  { icon: FileText, label: "Resume Builder", path: "/builder" },
   { icon: Zap, label: "ATS Scanner", path: "/dashboard/ats" },
   { icon: Store, label: "Marketplace", path: "/dashboard/marketplace" },
   { icon: Briefcase, label: "Job Board", path: "/dashboard/jobs" },
@@ -38,7 +38,7 @@ const menuItems = [
   { icon: Gift, label: "Affiliate Program", path: "/dashboard/affiliate" },
   { icon: Building, label: "Organization", path: "/dashboard/organization" },
   { icon: CreditCard, label: "Billing & Subscriptions", path: "/dashboard/billing" },
-  { icon: ShieldCheck, label: "Admin CRM", path: "/dashboard/admin", adminOnly: true }
+  { icon: ShieldCheck, label: "Admin CRM", path: "/admin" }
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -97,7 +97,9 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find(item => 
+    item.path === location || (item.path === "/admin" && location === "/url")
+  );
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -168,7 +170,7 @@ function DashboardLayoutContent({
               {menuItems.map(item => {
                 // Hide admin CRM if they are not an administrator
                 if ((item as any).adminOnly && user?.role !== 'admin') return null;
-                const isActive = location === item.path;
+                const isActive = location === item.path || (item.path === "/admin" && location === "/url");
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton

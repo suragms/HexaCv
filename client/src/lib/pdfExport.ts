@@ -7,69 +7,60 @@ import { Resume } from '@shared/types';
  */
 export async function exportResumeToPDF(resumeElement: HTMLElement, fileName: string = 'resume.pdf') {
   try {
-    // Create a new window for printing
-    const printWindow = window.open('', '', 'width=800,height=600');
-    if (!printWindow) {
-      throw new Error('Failed to open print window');
+    // Temporarily reset CSS zoom if applied to ensure html2canvas captures at standard 100% resolution
+    const originalZoom = resumeElement.style.zoom;
+    resumeElement.style.zoom = '1';
+
+    const { jsPDF } = await import('jspdf');
+    const html2canvas = (await import('html2canvas')).default;
+
+    // Render HTML to canvas
+    const canvas = await html2canvas(resumeElement, {
+      scale: 2, // High resolution scaling
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    });
+
+    // Restore the original zoom
+    resumeElement.style.zoom = originalZoom;
+
+    // Create PDF from canvas
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    // Scale image to fill exactly the width of the page (A4)
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    // Add first page
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    // Add subsequent pages if there's significant overflow (with 2mm tolerance to avoid trailing blank page)
+    while (heightLeft > 2) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
     }
 
-    // Clone the resume element
-    const clonedElement = resumeElement.cloneNode(true) as HTMLElement;
-
-    // Write content to print window
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${fileName}</title>
-          <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            body {
-              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-              line-height: 1.5;
-              color: #1f2937;
-              background: white;
-            }
-            
-            @media print {
-              body {
-                margin: 0;
-                padding: 0;
-              }
-              
-              .no-print {
-                display: none !important;
-              }
-            }
-            
-            @page {
-              margin: 0.5in;
-              size: letter;
-            }
-          </style>
-        </head>
-        <body>
-          ${clonedElement.innerHTML}
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-
-    // Wait for content to load
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    // Save the file directly, triggering download
+    pdf.save(fileName);
   } catch (error) {
     console.error('Failed to export PDF:', error);
-    throw error;
+    // Fallback to print window if canvas rendering fails
+    window.print();
   }
 }
 

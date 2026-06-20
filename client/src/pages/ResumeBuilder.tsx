@@ -13,7 +13,14 @@ import { Resume, ParsedResume, ResumeSection } from '@shared/types';
 import { nanoid } from 'nanoid';
 
 export default function ResumeBuilder() {
-  const [mode, setMode] = useState<'upload' | 'scratch' | 'ai' | 'linkedin'>('upload');
+  const [mode, setMode] = useState<'upload' | 'scratch' | 'ai' | 'linkedin'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get('mode');
+    if (m === 'scratch' || m === 'ai' || m === 'linkedin') {
+      return m;
+    }
+    return 'upload';
+  });
   const [activeResume, setActiveResume] = useState<Resume | null>(null);
 
   const createResumeFromParsed = (parsed: ParsedResume): Resume => {
