@@ -66,8 +66,7 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
           "bg-white shadow-xl w-[210mm] min-h-[297mm] text-slate-800 flex flex-col p-10 font-sans"
         )}
         style={{
-          transform: `scale(${zoom / 100})`,
-          transformOrigin: 'top center',
+          zoom: zoom / 100,
         }}
       >
         {/* Header */}

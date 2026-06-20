@@ -133,7 +133,7 @@ export default function ResumeBuilder() {
       </header>
 
       {/* Main Content */}
-      <main className="container max-w-6xl mx-auto px-4 py-8">
+      <main className="container max-w-[95vw] xl:max-w-[1600px] mx-auto px-4 py-6">
         {activeResume ? (
           <div className="h-[calc(100vh-140px)]">
             <ResumeEditor resume={activeResume} onUpdate={handleResumeUpdate} />

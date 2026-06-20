@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,8 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Download, Eye, Edit3, Settings, Undo, Redo, ZoomIn, ZoomOut, 
-  Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown 
+  Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown,
+  User, AlignLeft, Code, Briefcase, Folder, GraduationCap, Award, Trophy,
+  PanelLeft, PanelLeftClose
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Resume, TemplateId, ParsedResume, ResumeSection } from '@shared/types';
 import { TEMPLATES } from '@/lib/templates';
 import { PRESET_JOBS } from '@/lib/jobDescriptions';
@@ -28,12 +31,15 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [selectedJob, setSelectedJob] = useState<string>(resume.jobDescriptionId || '');
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [activeEditTab, setActiveEditTab] = useState<string>('header');
-  const [zoom, setZoom] = useState<number>(100);
+  const [zoom, setZoom] = useState<number>(70); // Set default zoom to 70% to fit live preview side-by-side
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
+  const [isTabsListCollapsed, setIsTabsListCollapsed] = useState<boolean>(false);
 
   // History stack for Undo/Redo
   const [history, setHistory] = useState<Resume[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize history
   useEffect(() => {
@@ -43,20 +49,57 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   }, []);
 
+  // Cleanup history timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (historyTimeoutRef.current) {
+        clearTimeout(historyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Debounced helper to push to history
+  const pushToHistory = (updated: Resume) => {
+    if (historyTimeoutRef.current) {
+      clearTimeout(historyTimeoutRef.current);
+    }
+
+    historyTimeoutRef.current = setTimeout(() => {
+      setHistory((prevHistory) => {
+        const nextHistory = prevHistory.slice(0, historyIndex + 1);
+        const lastEntry = nextHistory[nextHistory.length - 1];
+        // Only push if the content has actually changed from the last history snapshot
+        if (lastEntry && JSON.stringify(lastEntry.sections) === JSON.stringify(updated.sections)) {
+          return prevHistory;
+        }
+        setHistoryIndex(nextHistory.length);
+        return [...nextHistory, updated];
+      });
+    }, 800);
+  };
+
   // Update resume and track history
   const updateResumeData = (updated: Resume) => {
     setAutoSaveStatus('saving');
     onUpdate(updated);
-
-    // Track history
-    const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, updated]);
-    setHistoryIndex(nextHistory.length);
+    pushToHistory(updated);
 
     setTimeout(() => {
       setAutoSaveStatus('saved');
     }, 500);
   };
+
+  // Vertical tabs mapping
+  const formSections = [
+    { id: 'header', label: 'Contact Info', icon: User },
+    { id: 'summary', label: 'Summary', icon: AlignLeft },
+    { id: 'skills', label: 'Skills', icon: Code },
+    { id: 'experience', label: 'Experience', icon: Briefcase },
+    { id: 'projects', label: 'Projects', icon: Folder },
+    { id: 'education', label: 'Education', icon: GraduationCap },
+    { id: 'certifications', label: 'Certifications', icon: Award },
+    { id: 'achievements', label: 'Achievements', icon: Trophy },
+  ];
 
   const handleUndo = () => {
     if (historyIndex > 0) {
@@ -239,14 +282,17 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-      {/* LEFT COLUMN - Settings & ATS Widget (Span 4) */}
-      <div className="lg:col-span-4 space-y-4 overflow-y-auto max-h-[calc(100vh-140px)] pr-2">
+      {/* LEFT PANEL - Settings & Score & Section Visibility */}
+      <div className={cn(
+        "col-span-12 lg:col-span-3 space-y-4 overflow-y-auto max-h-[calc(100vh-160px)] pr-1 transition-all duration-300",
+        isLeftPanelCollapsed && "lg:hidden"
+      )}>
         {/* Document Settings */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-4">
+        <Card className="border-slate-200 shadow-sm p-4 space-y-4 bg-white rounded-xl">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-900 text-sm">Design & Template</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
-              autoSaveStatus === 'saved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800 animate-pulse'
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+              autoSaveStatus === 'saved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100 animate-pulse'
             }`}>
               <CheckCircle2 className="w-3 h-3" />
               {autoSaveStatus === 'saved' ? 'Saved' : 'Saving...'}
@@ -255,19 +301,19 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-500">Active Layout</Label>
-              <div className="text-xs font-medium text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded border border-emerald-100">
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Layout</Label>
+              <div className="text-xs font-semibold text-emerald-800 bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-100">
                 Exclusive ATS Layout (Emerald Highlights)
               </div>
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-500">Target Job Description</Label>
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Job Description</Label>
               <Select value={selectedJob} onValueChange={(v) => {
                 setSelectedJob(v);
                 updateResumeData({ ...resume, jobDescriptionId: v });
               }}>
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-9 rounded-lg border-slate-200">
                   <SelectValue placeholder="Select target..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -279,59 +325,49 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
 
-          <div className="flex gap-2 justify-between border-t border-slate-100 pt-3">
-            <div className="flex gap-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleUndo} disabled={historyIndex <= 0}>
-                <Undo className="w-3.5 h-3.5" />
-              </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>
-                <Redo className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            <div className="flex gap-1 items-center">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom(Math.max(50, zoom - 10))}>
-                <ZoomOut className="w-3.5 h-3.5" />
-              </Button>
-              <span className="text-xs text-slate-500 font-semibold px-1">{zoom}%</span>
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom(Math.min(150, zoom + 10))}>
-                <ZoomIn className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+          <div className="flex gap-2 border-t border-slate-100 pt-3">
+            <Button variant="outline" size="sm" className="h-8 gap-1 text-xs font-semibold flex-1 border-slate-200 rounded-lg animate-fade-in" onClick={handleUndo} disabled={historyIndex <= 0}>
+              <Undo className="w-3.5 h-3.5" />
+              Undo
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 gap-1 text-xs font-semibold flex-1 border-slate-200 rounded-lg animate-fade-in" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>
+              <Redo className="w-3.5 h-3.5" />
+              Redo
+            </Button>
           </div>
         </Card>
 
         {/* ATS Score Engine Widget */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-4">
-          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-emerald-600" />
+        <Card className="border-slate-200 shadow-sm p-4 space-y-4 bg-white rounded-xl">
+          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5 border-b border-slate-50 pb-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
             ATS Optimization Score
           </h3>
           <div className="flex items-center gap-4">
-            <div className="relative flex items-center justify-center">
+            <div className="relative flex items-center justify-center shrink-0">
               <svg className="w-16 h-16 transform -rotate-90">
                 <circle cx="32" cy="32" r="28" stroke="#f1f5f9" strokeWidth="6" fill="transparent" />
                 <circle cx="32" cy="32" r="28" stroke={atsSummary.score >= 70 ? "#10b981" : atsSummary.score >= 40 ? "#f59e0b" : "#ef4444"} strokeWidth="6" fill="transparent"
                   strokeDasharray={175} strokeDashoffset={175 - (175 * atsSummary.score) / 100} />
               </svg>
-              <span className="absolute text-base font-extrabold">{atsSummary.score}</span>
+              <span className="absolute text-base font-extrabold text-slate-800">{atsSummary.score}</span>
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-semibold text-slate-900">
+              <p className="text-xs font-bold text-slate-800">
                 {atsSummary.score >= 70 ? 'Excellent Match!' : atsSummary.score >= 40 ? 'Moderate Match' : 'Action Required'}
               </p>
-              <p className="text-[10px] text-slate-500">Keyword Alignment: {atsSummary.matchedKeywords.length} matched</p>
-              <p className="text-[10px] text-slate-500">Section Completeness: {atsSummary.completenessScore}%</p>
+              <p className="text-[10px] text-slate-500 font-semibold">Keyword Alignment: {atsSummary.matchedKeywords.length} matched</p>
+              <p className="text-[10px] text-slate-500 font-semibold">Section Completeness: {atsSummary.completenessScore}%</p>
             </div>
           </div>
 
           {atsSummary.suggestions.length > 0 && (
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5 space-y-1">
-              <p className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1">
+              <p className="text-[10px] font-extrabold text-amber-800 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
                 Suggestions to Improve:
               </p>
-              <ul className="text-[10px] text-amber-700 list-disc pl-4 space-y-0.5">
+              <ul className="text-[10px] text-amber-700 list-disc pl-4 space-y-1 font-medium">
                 {atsSummary.suggestions.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
@@ -341,15 +377,15 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
           {selectedJob && (
             <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Keywords Details</h4>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Keywords Details</h4>
               <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
                 {atsSummary.matchedKeywords.map((k, i) => (
-                  <span key={i} className="bg-emerald-50 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded border border-emerald-100">
+                  <span key={i} className="bg-emerald-50 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-md border border-emerald-100 font-semibold">
                     {k}
                   </span>
                 ))}
                 {atsSummary.missingKeywords.map((k, i) => (
-                  <span key={i} className="bg-red-50 text-red-800 text-[9px] px-1.5 py-0.5 rounded border border-red-100 line-through">
+                  <span key={i} className="bg-red-50 text-red-800 text-[9px] px-1.5 py-0.5 rounded-md border border-red-100 line-through font-semibold">
                     {k}
                   </span>
                 ))}
@@ -359,8 +395,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         </Card>
 
         {/* Section Visibility and Ordering */}
-        <Card className="border-slate-200 shadow-sm p-4 space-y-3">
-          <h3 className="font-bold text-slate-900 text-sm">Sections Visibility</h3>
+        <Card className="border-slate-200 shadow-sm p-4 space-y-3 bg-white rounded-xl">
+          <h3 className="font-bold text-slate-900 text-sm border-b border-slate-50 pb-2">Sections Visibility</h3>
           <div className="space-y-1.5">
             {resume.sections.map((section, idx) => (
               <div key={section.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg transition">
@@ -374,15 +410,15 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       );
                       updateResumeData({ ...resume, sections: updated });
                     }}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
                   />
-                  <span className="text-xs text-slate-700 capitalize font-medium">{section.type}</span>
+                  <span className="text-xs text-slate-700 capitalize font-semibold">{section.type}</span>
                 </div>
                 <div className="flex gap-0.5">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="h-6 w-6 text-slate-400 hover:text-slate-600"
                     disabled={idx === 0}
                     onClick={() => {
                       const list = [...resume.sections];
@@ -397,7 +433,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="h-6 w-6 text-slate-400 hover:text-slate-600"
                     disabled={idx === resume.sections.length - 1}
                     onClick={() => {
                       const list = [...resume.sections];
@@ -416,57 +452,91 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         </Card>
       </div>
 
-      {/* CENTER COLUMN - Editor & Preview (Span 8) */}
-      <div className="lg:col-span-8 flex flex-col gap-4">
-        {/* Toggle Mode */}
-        <div className="flex justify-between items-center bg-white border border-slate-200 rounded-lg p-2">
-          <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as any)} className="w-full">
-            <div className="flex justify-between items-center w-full">
-              <TabsList className="grid grid-cols-2 w-48">
-                <TabsTrigger value="edit" className="gap-1.5 py-1">
-                  <Edit3 className="w-3.5 h-3.5" />
-                  Edit Form
-                </TabsTrigger>
-                <TabsTrigger value="preview" className="gap-1.5 py-1">
-                  <Eye className="w-3.5 h-3.5" />
-                  Live Preview
-                </TabsTrigger>
-              </TabsList>
-
-              <div className="flex gap-2">
-                <Button onClick={handleExportPDF} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-9">
-                  <Download className="w-4 h-4" />
-                  Export PDF
-                </Button>
-                <Button onClick={handleExportDOCX} className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9">
-                  <Download className="w-4 h-4" />
-                  Export DOCX
-                </Button>
-              </div>
+      {/* CENTER PANEL - Edit Form (Span 5 on desktop, expands to 7 when settings are collapsed) */}
+      <div className={cn(
+        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
+        isLeftPanelCollapsed ? "lg:col-span-7" : "lg:col-span-5",
+        previewMode === 'preview' ? "hidden lg:flex" : "flex"
+      )}>
+        {/* Toggle Mode header on mobile, regular title on desktop */}
+        <div className="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+              className="hidden lg:inline-flex border border-slate-200 h-8 w-8 text-slate-500 hover:text-slate-700 rounded-lg mr-1 hover:bg-slate-100"
+              title={isLeftPanelCollapsed ? "Show Settings Panel" : "Hide Settings Panel"}
+            >
+              {isLeftPanelCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </Button>
+            <h2 className="font-bold text-slate-900 text-sm hidden lg:block">Resume Editor</h2>
+            <div className="lg:hidden">
+              <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as any)} className="w-full">
+                <TabsList className="grid grid-cols-2 w-48">
+                  <TabsTrigger value="edit" className="gap-1.5 py-1.5 text-xs">
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit Form
+                  </TabsTrigger>
+                  <TabsTrigger value="preview" className="gap-1.5 py-1.5 text-xs">
+                    <Eye className="w-3.5 h-3.5" />
+                    Live Preview
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-          </Tabs>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleExportPDF} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white gap-1.5 h-9 text-xs font-semibold shadow-md hover:shadow-lg transition-all rounded-lg">
+              <Download className="w-4 h-4" />
+              Export PDF
+            </Button>
+            <Button onClick={handleExportDOCX} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-1.5 h-9 text-xs font-semibold shadow-md hover:shadow-lg transition-all rounded-lg">
+              <Download className="w-4 h-4" />
+              Export DOCX
+            </Button>
+          </div>
         </div>
 
-        {/* View Content */}
-        <div className="flex-1 min-h-0">
-          {previewMode === 'preview' ? (
-            <div className="border border-slate-200 rounded-lg bg-white overflow-hidden max-h-[calc(100vh-210px)]">
-              <ResumePreview resume={resume} templateId={selectedTemplate} zoom={zoom} />
-            </div>
-          ) : (
-            <Card className="border-slate-200 p-6 flex flex-col max-h-[calc(100vh-210px)] overflow-y-auto">
-              {/* Section Tabs inside Form */}
-              <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full">
-                <TabsList className="flex flex-wrap gap-1 bg-slate-100 p-1 mb-6 max-w-full overflow-x-auto whitespace-nowrap">
-                  <TabsTrigger value="header">Contact Header</TabsTrigger>
-                  <TabsTrigger value="summary">Summary</TabsTrigger>
-                  <TabsTrigger value="skills">Skills</TabsTrigger>
-                  <TabsTrigger value="experience">Experience</TabsTrigger>
-                  <TabsTrigger value="projects">Projects</TabsTrigger>
-                  <TabsTrigger value="education">Education</TabsTrigger>
-                  <TabsTrigger value="certifications">Certifications</TabsTrigger>
-                  <TabsTrigger value="achievements">Achievements</TabsTrigger>
-                </TabsList>
+        {/* Editor Card with vertical side-tabs */}
+        <Card className="border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-white shadow-sm p-0 rounded-xl">
+          <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="flex flex-row w-full h-full items-stretch">
+            <TabsList className={cn(
+              "h-full border-r border-slate-100 bg-slate-50/50 p-2 flex flex-col gap-1 overflow-y-auto items-stretch justify-between rounded-none bg-transparent shrink-0 transition-all duration-300",
+              isTabsListCollapsed ? "w-[50px]" : "w-[165px]"
+            )}>
+              <div className="space-y-1 w-full">
+                {formSections.map((sec) => {
+                  const Icon = sec.icon;
+                  const isActive = activeEditTab === sec.id;
+                  return (
+                    <TabsTrigger
+                      key={sec.id}
+                      value={sec.id}
+                      title={isTabsListCollapsed ? sec.label : undefined}
+                      className={cn(
+                        "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-all justify-start border-0 shadow-none data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer w-full",
+                        isTabsListCollapsed && "justify-center px-0"
+                      )}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {!isTabsListCollapsed && <span className="truncate">{sec.label}</span>}
+                    </TabsTrigger>
+                  );
+                })}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsTabsListCollapsed(!isTabsListCollapsed)}
+                className="h-8 w-full border-t border-slate-100 rounded-none text-slate-400 hover:text-slate-600 shrink-0 mt-2 hover:bg-slate-100/50"
+                title={isTabsListCollapsed ? "Expand Menu" : "Collapse Menu"}
+              >
+                {isTabsListCollapsed ? <PanelLeft className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+              </Button>
+            </TabsList>
+            <div className="flex-1 p-6 overflow-y-auto h-full">
+
 
                 {/* HEADER TAB */}
                 <TabsContent value="header" className="space-y-4">
@@ -1072,10 +1142,51 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                     ))}
                   </div>
                 </TabsContent>
-              </Tabs>
-            </Card>
-          )}
+            </div>
+          </Tabs>
+        </Card>
+      </div>
+
+      {/* RIGHT PANEL - Live Preview */}
+      <div className={cn(
+        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
+        isLeftPanelCollapsed ? "lg:col-span-5" : "lg:col-span-4",
+        previewMode === 'edit' ? "hidden lg:flex" : "flex"
+      )}>
+        {/* Toggle Mode header on mobile (hidden on desktop) */}
+        <div className="lg:hidden flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+          <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as any)} className="w-full">
+            <TabsList className="grid grid-cols-2 w-48">
+              <TabsTrigger value="edit" className="gap-1.5 py-1.5 text-xs">
+                <Edit3 className="w-3.5 h-3.5" />
+                Edit Form
+              </TabsTrigger>
+              <TabsTrigger value="preview" className="gap-1.5 py-1.5 text-xs">
+                <Eye className="w-3.5 h-3.5" />
+                Live Preview
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
+
+        {/* Live Preview Card with zoom controls */}
+        <Card className="border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-white shadow-sm p-0 rounded-xl">
+          <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex justify-between items-center shrink-0">
+            <span className="text-xs font-bold text-slate-700">Live Preview</span>
+            <div className="flex gap-1.5 items-center">
+              <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200" onClick={() => setZoom(Math.max(50, zoom - 10))}>
+                <ZoomOut className="w-3.5 h-3.5 text-slate-500" />
+              </Button>
+              <span className="text-[11px] text-slate-600 font-extrabold px-1 min-w-[32px] text-center">{zoom}%</span>
+              <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200" onClick={() => setZoom(Math.min(150, zoom + 10))}>
+                <ZoomIn className="w-3.5 h-3.5 text-slate-500" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden flex">
+            <ResumePreview resume={resume} templateId={selectedTemplate} zoom={zoom} />
+          </div>
+        </Card>
       </div>
     </div>
   );
