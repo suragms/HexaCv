@@ -1,61 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Check, ShieldAlert, CreditCard, Sparkles, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Input } from "./ui/input";
 
 interface BillingProps {
   resumesCount: number;
 }
 
 export default function BillingPortal({ resumesCount }: BillingProps) {
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [targetTier, setTargetTier] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Credit Card Form States
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCVC, setCardCVC] = useState("");
-
   const getSubQuery = trpc.billing.getSubscription.useQuery();
-  const upgradePlanMutation = trpc.billing.upgradePlan.useMutation();
+  const checkoutMutation = trpc.billing.createCheckoutSession.useMutation();
 
   const currentTier = getSubQuery.data?.tier || "free";
 
-  const handleCheckoutTrigger = (tier: string) => {
+  const handleCheckoutTrigger = async (tier: string) => {
     if (tier === currentTier) {
       toast.info(`You are already subscribed to the ${tier} tier.`);
       return;
     }
-    setTargetTier(tier);
-    setCheckoutOpen(true);
-  };
-
-  const handleUpgrade = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cardNumber || !cardExpiry || !cardCVC) {
-      toast.error("Please fill in credit card credentials");
-      return;
-    }
 
     setIsProcessing(true);
-    toast.info("Contacting Stripe payment gateways...");
-    
+    toast.info("Connecting to Stripe payments gateway...");
     try {
-      await upgradePlanMutation.mutateAsync({ tier: targetTier });
-      toast.success(`Success! Workspace upgraded to "${targetTier}"!`);
-      getSubQuery.refetch();
-      setCheckoutOpen(false);
-      setCardNumber("");
-      setCardExpiry("");
-      setCardCVC("");
-    } catch (e: any) {
-      toast.error("Stripe gateway verification error");
+      const { url } = await checkoutMutation.mutateAsync({ tier });
+      if (url) {
+        toast.success("Redirecting to secure payment checkout...");
+        window.location.href = url;
+      } else {
+        toast.error("Failed to generate checkout URL.");
+      }
+    } catch (err: any) {
+      toast.error("Failed to generate checkout session: " + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -180,6 +160,7 @@ export default function BillingPortal({ resumesCount }: BillingProps) {
           </CardContent>
           <CardFooter>
             <Button
+              disabled={isProcessing}
               onClick={() => handleCheckoutTrigger("pro")}
               className={`w-full ${
                 currentTier === "pro"
@@ -187,6 +168,7 @@ export default function BillingPortal({ resumesCount }: BillingProps) {
                   : "bg-blue-600 hover:bg-blue-700 text-white font-medium"
               }`}
             >
+              {isProcessing && <RefreshCw className="w-4 h-4 animate-spin mr-2" />}
               {currentTier === "pro" ? "Current Plan" : "Upgrade to Pro"}
             </Button>
           </CardFooter>
@@ -229,6 +211,7 @@ export default function BillingPortal({ resumesCount }: BillingProps) {
           </CardContent>
           <CardFooter>
             <Button
+              disabled={isProcessing}
               onClick={() => handleCheckoutTrigger("enterprise")}
               className={`w-full ${
                 currentTier === "enterprise"
@@ -236,82 +219,12 @@ export default function BillingPortal({ resumesCount }: BillingProps) {
                   : "bg-slate-900 hover:bg-slate-850 text-white font-medium"
               }`}
             >
+              {isProcessing && <RefreshCw className="w-4 h-4 animate-spin mr-2" />}
               {currentTier === "enterprise" ? "Current Plan" : "Upgrade to Enterprise"}
             </Button>
           </CardFooter>
         </Card>
       </div>
-
-      {/* Stripe Payment simulation Modal */}
-      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <DialogContent className="max-w-sm bg-white">
-          <form onSubmit={handleUpgrade}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-blue-600" />
-                Stripe Payments Checkout
-              </DialogTitle>
-              <DialogDescription>
-                Confirm upgrade to <strong className="uppercase text-slate-800">{targetTier}</strong>. Secure connection.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Credit Card Number</label>
-                <Input
-                  type="text"
-                  maxLength={19}
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value.replace(/\s?/g, '').replace(/(\d{4})/g, '$1 ').trim())}
-                  placeholder="4242 4242 4242 4242"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Expiry Date</label>
-                  <Input
-                    type="text"
-                    maxLength={5}
-                    value={cardExpiry}
-                    onChange={(e) => setCardExpiry(e.target.value)}
-                    placeholder="MM/YY"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">CVC Code</label>
-                  <Input
-                    type="password"
-                    maxLength={3}
-                    value={cardCVC}
-                    onChange={(e) => setCardCVC(e.target.value)}
-                    placeholder="•••"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isProcessing} className="bg-blue-600 text-white gap-2">
-                {isProcessing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Processing Payment...
-                  </>
-                ) : (
-                  <>
-                    Authorize Upgrade
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -10,13 +10,14 @@ import {
   Download, Eye, Edit3, Settings, Undo, Redo, ZoomIn, ZoomOut, 
   Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown,
   User, AlignLeft, Code, Briefcase, Folder, GraduationCap, Award, Trophy,
-  PanelLeft, PanelLeftClose
+  PanelLeft, PanelLeftClose, Globe, Users, LayoutList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Resume, TemplateId, ParsedResume, ResumeSection } from '@shared/types';
 import { TEMPLATES } from '@/lib/templates';
 import { PRESET_JOBS } from '@/lib/jobDescriptions';
 import ResumePreview from './ResumePreview';
+import CountryLocationFields from './CountryLocationFields';
 import { exportResumeToPDF, exportResumeToDOCX } from '@/lib/pdfExport';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -29,7 +30,11 @@ const WIZARD_STEPS = [
   { id: 5, label: 'Projects', key: 'projects', icon: Folder },
   { id: 6, label: 'Education', key: 'education', icon: GraduationCap },
   { id: 7, label: 'Credentials', key: 'certifications', icon: Award },
-  { id: 8, label: 'Review', key: 'achievements', icon: Trophy },
+  { id: 8, label: 'Languages', key: 'languages', icon: Globe },
+  { id: 9, label: 'References', key: 'references', icon: Users },
+  { id: 10, label: 'Custom', key: 'custom', icon: LayoutList },
+  { id: 11, label: 'Layout', key: 'layout', icon: Settings },
+  { id: 12, label: 'Review', key: 'achievements', icon: Trophy },
 ];
 
 interface ResumeEditorProps {
@@ -38,6 +43,7 @@ interface ResumeEditorProps {
 }
 
 export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
+  const [localResume, setLocalResume] = useState<Resume>(resume);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(resume.templateId as TemplateId);
   const [selectedJob, setSelectedJob] = useState<string>(resume.jobDescriptionId || '');
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
@@ -48,10 +54,99 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [isTabsListCollapsed, setIsTabsListCollapsed] = useState<boolean>(false);
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
+  const [countriesList, setCountriesList] = useState<any[]>([]);
+  const [atsRules, setAtsRules] = useState<any>(null);
+
+  const headerContent = (localResume.sections.find(s => s.type === 'header')?.content.header || {}) as any;
+  const currentCountry = headerContent.countryCode || '';
+  const targetCountry = headerContent.targetCountryCode || '';
+
+  useEffect(() => {
+    fetch('/countries')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setCountriesList(data))
+      .catch(err => console.error('Error fetching countries in ResumeEditor:', err));
+  }, []);
+
+  useEffect(() => {
+    if (!currentCountry || !targetCountry) {
+      setAtsRules(null);
+      return;
+    }
+    fetch(`/country-ats-rules/${currentCountry}/${targetCountry}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setAtsRules(data))
+      .catch(err => console.error('Error fetching ATS rules in ResumeEditor:', err));
+  }, [currentCountry, targetCountry]);
+
+  // Validation helpers
+  const isValidEmail = (email: string) => {
+    if (!email) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const isValidUrl = (url: string) => {
+    if (!url) return true;
+    try {
+      let testUrl = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        testUrl = 'https://' + url;
+      }
+      new URL(testUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const isValidPhone = (phone: string) => {
+    if (!phone) return true;
+    return /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/.test(phone);
+  };
+
   // History stack for Undo/Redo
   const [history, setHistory] = useState<Resume[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keep localResume in sync with outside resume (e.g. from parent initial state or undo/redo)
+  useEffect(() => {
+    // If the base changes (e.g., loaded new resume or undid/redid), update local state
+    setLocalResume(resume);
+  }, [resume.id]);
+
+  // Ensure missing sections are initialized for backwards compatibility
+  useEffect(() => {
+    const typesPresent = resume.sections.map(s => s.type);
+    let updatedSections = [...resume.sections];
+    let changed = false;
+    
+    const missingTypes: ('languages' | 'references' | 'custom')[] = [];
+    if (!typesPresent.includes('languages')) missingTypes.push('languages');
+    if (!typesPresent.includes('references')) missingTypes.push('references');
+    if (!typesPresent.includes('custom')) missingTypes.push('custom');
+    
+    if (missingTypes.length > 0) {
+      let maxOrder = Math.max(...resume.sections.map(s => s.order), 0);
+      missingTypes.forEach(type => {
+        maxOrder++;
+        updatedSections.push({
+          id: nanoid(),
+          type: type as any,
+          order: maxOrder,
+          visible: true,
+          content: type === 'languages' ? { languages: [] } : type === 'references' ? { references: [] } : { customSections: [] }
+        });
+      });
+      changed = true;
+    }
+    
+    if (changed) {
+      onUpdate({ ...resume, sections: updatedSections });
+      setLocalResume({ ...resume, sections: updatedSections });
+    }
+  }, [resume.id]);
 
   // Initialize history
   useEffect(() => {
@@ -61,12 +156,11 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   }, []);
 
-  // Cleanup history timeout on unmount
+  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (historyTimeoutRef.current) {
-        clearTimeout(historyTimeoutRef.current);
-      }
+      if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, []);
 
@@ -80,7 +174,6 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       setHistory((prevHistory) => {
         const nextHistory = prevHistory.slice(0, historyIndex + 1);
         const lastEntry = nextHistory[nextHistory.length - 1];
-        // Only push if the content has actually changed from the last history snapshot
         if (lastEntry && JSON.stringify(lastEntry.sections) === JSON.stringify(updated.sections)) {
           return prevHistory;
         }
@@ -90,15 +183,20 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }, 800);
   };
 
-  // Update resume and track history
+  // Update local resume data immediately and parent data after 1.5s debounce
   const updateResumeData = (updated: Resume) => {
+    setLocalResume(updated);
     setAutoSaveStatus('saving');
-    onUpdate(updated);
-    pushToHistory(updated);
 
-    setTimeout(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      onUpdate(updated);
+      pushToHistory(updated);
       setAutoSaveStatus('saved');
-    }, 500);
+    }, 1500);
   };
 
   // Vertical tabs mapping
@@ -117,7 +215,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     if (historyIndex > 0) {
       const nextIndex = historyIndex - 1;
       setHistoryIndex(nextIndex);
-      onUpdate(history[nextIndex]);
+      const prev = history[nextIndex];
+      setLocalResume(prev);
+      onUpdate(prev);
       toast.success('Undo successful');
     }
   };
@@ -126,7 +226,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     if (historyIndex < history.length - 1) {
       const nextIndex = historyIndex + 1;
       setHistoryIndex(nextIndex);
-      onUpdate(history[nextIndex]);
+      const next = history[nextIndex];
+      setLocalResume(next);
+      onUpdate(next);
       toast.success('Redo successful');
     }
   };
@@ -139,7 +241,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
     toast.info('Exporting resume to PDF...');
     try {
-      await exportResumeToPDF(element, `${resume.title || 'resume'}.pdf`);
+      await exportResumeToPDF(element, `${localResume.title || 'resume'}.pdf`);
       toast.success('PDF downloaded successfully!');
     } catch (e) {
       console.error(e);
@@ -155,7 +257,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
     toast.info('Exporting resume to Word document...');
     try {
-      await exportResumeToDOCX(element, `${resume.title || 'resume'}.doc`);
+      await exportResumeToDOCX(element, `${localResume.title || 'resume'}.doc`);
       toast.success('Word document downloaded successfully!');
     } catch (e) {
       console.error(e);
@@ -166,7 +268,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   // ATS engine score calculation
   const getResumeTextContent = (): string => {
     let text = '';
-    resume.sections.forEach((sec) => {
+    localResume.sections.forEach((sec) => {
       if (!sec.visible) return;
       if (sec.type === 'header' && sec.content.header) {
         const h = sec.content.header;
@@ -193,6 +295,21 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         sec.content.certifications.forEach(c => {
           text += ` ${c.name} ${c.issuer}`;
         });
+      } else if (sec.type === 'languages' && sec.content.languages) {
+        sec.content.languages.forEach(l => {
+          text += ` ${l.language} ${l.proficiency}`;
+        });
+      } else if (sec.type === 'references' && sec.content.references) {
+        sec.content.references.forEach(r => {
+          text += ` ${r.name} ${r.company} ${r.title} ${r.email}`;
+        });
+      } else if (sec.type === 'custom' && sec.content.customSections) {
+        sec.content.customSections.forEach(s => {
+          text += ` ${s.title}`;
+          s.items.forEach(i => {
+            text += ` ${i.title} ${i.subtitle} ${i.description}`;
+          });
+        });
       }
     });
     return text.toLowerCase();
@@ -209,20 +326,30 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     const matchedKeywords: string[] = [];
     const missingKeywords: string[] = [];
 
-    // 1. Keyword match
-    if (activeJob) {
-      activeJob.keywords.forEach(keyword => {
+    // 1. Keyword match - combine job keywords with target country ATS keywords
+    const jobKeywords = activeJob ? [...activeJob.keywords] : [];
+    let regionalKeywords: string[] = [];
+    if (atsRules) {
+      const parsedKeywords = typeof atsRules.keywords === 'string'
+        ? JSON.parse(atsRules.keywords)
+        : atsRules.keywords;
+      if (Array.isArray(parsedKeywords)) {
+        regionalKeywords = parsedKeywords;
+      }
+    }
+    const allKeywordsToCheck = Array.from(new Set([...jobKeywords, ...regionalKeywords]));
+
+    if (allKeywordsToCheck.length > 0) {
+      allKeywordsToCheck.forEach(keyword => {
         if (resumeText.includes(keyword.toLowerCase())) {
           matchedKeywords.push(keyword);
         } else {
           missingKeywords.push(keyword);
         }
       });
-      keywordScore = activeJob.keywords.length > 0 
-        ? Math.round((matchedKeywords.length / activeJob.keywords.length) * 100)
-        : 100;
+      keywordScore = Math.round((matchedKeywords.length / allKeywordsToCheck.length) * 100);
     } else {
-      keywordScore = 100; // No job selected
+      keywordScore = 100; // No keywords to check
     }
 
     // 2. Completeness score
@@ -244,7 +371,77 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     if (selectedTemplate === 'technical-compact') readabilityScore = 85;
     if (selectedTemplate === 'classic-ats-blue') readabilityScore = 90;
 
-    const overallScore = activeJob
+    // 4. Localization Validation & regional hiring alignment checks
+    const locationErrors: string[] = [];
+    let phoneFormatError = '';
+
+    const headerSec = localResume.sections.find(s => s.type === 'header');
+    const headerVal = (headerSec?.content.header || {}) as any;
+    const fields = (headerVal.locationFields || {}) as any;
+    const targetCode = headerVal.targetCountryCode;
+    const currentCode = headerVal.countryCode;
+
+    if (targetCode && countriesList.length > 0) {
+      const targetC = countriesList.find(c => c.code === targetCode);
+      if (targetC) {
+        const expectedFields = targetC.locationFields || [];
+        const hasState = expectedFields.some((f: any) => f.key === 'state');
+        const hasDistrict = expectedFields.some((f: any) => f.key === 'district');
+        const hasEmirate = expectedFields.some((f: any) => f.key === 'emirate');
+        const hasCounty = expectedFields.some((f: any) => f.key === 'county');
+        const hasPostal = expectedFields.some((f: any) => f.key === 'postalCode');
+
+        if (hasState && !fields.state) {
+          locationErrors.push(`Missing State for target country ${targetC.name}.`);
+        }
+        if (hasDistrict && !fields.district) {
+          locationErrors.push(`Missing District for target country ${targetC.name}.`);
+        }
+        if (hasEmirate && !fields.emirate) {
+          locationErrors.push(`Missing Emirate for target country ${targetC.name}.`);
+        }
+        if (hasCounty && !fields.county) {
+          locationErrors.push(`Missing County for target country ${targetC.name}.`);
+        }
+        if (!fields.city) {
+          locationErrors.push(`Missing City for target country ${targetC.name}.`);
+        }
+        if (hasPostal) {
+          if (!fields.postalCode) {
+            locationErrors.push(`Missing ${targetC.postalCodeLabel || 'Postal Code'} for target country ${targetC.name}.`);
+          } else if (targetC.code === 'US' && !/^\d{5}(-\d{4})?$/.test(fields.postalCode)) {
+            locationErrors.push(`ZIP Code format invalid for United States (expected 5 digits).`);
+          } else if (targetC.code === 'IN' && !/^\d{6}$/.test(fields.postalCode)) {
+            locationErrors.push(`PIN Code format invalid for India (expected 6 digits).`);
+          }
+        }
+      }
+    }
+
+    if (currentCode && headerVal.phone && countriesList.length > 0) {
+      const currentC = countriesList.find(c => c.code === currentCode);
+      if (currentC && currentC.phoneRegex) {
+        const num = headerVal.phone;
+        const dial = currentC.dialCode;
+        const localNum = num.startsWith(dial) ? num.slice(dial.length).trim() : num.trim();
+        if (localNum) {
+          const regex = new RegExp(currentC.phoneRegex);
+          if (!regex.test(localNum)) {
+            phoneFormatError = `Phone number doesn't match expected pattern for ${currentC.name}: ${currentC.phoneFormat}`;
+          }
+        }
+      }
+    }
+
+    // Apply score deductions for formatting errors
+    if (locationErrors.length > 0) {
+      readabilityScore = Math.max(50, readabilityScore - 10);
+    }
+    if (phoneFormatError) {
+      readabilityScore = Math.max(50, readabilityScore - 5);
+    }
+
+    const overallScore = activeJob || regionalKeywords.length > 0
       ? Math.round(keywordScore * 0.5 + completenessScore * 0.3 + readabilityScore * 0.2)
       : Math.round(completenessScore * 0.7 + readabilityScore * 0.3);
 
@@ -256,8 +453,22 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     if (completenessScore < 100) {
       suggestions.push('Complete empty core sections (Header, Summary, Experience, Education)');
     }
-    if (!selectedJob) {
+    if (!selectedJob && regionalKeywords.length === 0) {
       suggestions.push('Select a target job description to get tailored keyword suggestions.');
+    }
+
+    // Add target country warnings
+    locationErrors.forEach(err => suggestions.push(err));
+    if (phoneFormatError) {
+      suggestions.push(phoneFormatError);
+    }
+
+    // Add regional hiring expectations as tips
+    if (atsRules?.regionalHiringExpectations) {
+      suggestions.push(`Hiring market tips for ${countriesList.find(c => c.code === targetCountry)?.name || targetCountry}: ${atsRules.regionalHiringExpectations}`);
+    }
+    if (atsRules?.preferredFormatting) {
+      suggestions.push(`Preferred layout for ${countriesList.find(c => c.code === targetCountry)?.name || targetCountry}: ${atsRules.preferredFormatting}`);
     }
 
     return {
@@ -273,7 +484,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
   // Handlers for updating specific resume sections
   const updateSection = (type: string, fields: any) => {
-    const updatedSections = resume.sections.map((sec) => {
+    const updatedSections = localResume.sections.map((sec) => {
       if (sec.type === type) {
         return {
           ...sec,
@@ -285,11 +496,70 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       }
       return sec;
     });
-    updateResumeData({ ...resume, sections: updatedSections });
+    updateResumeData({ ...localResume, sections: updatedSections });
   };
 
   const getSectionContent = (type: string): any => {
-    return resume.sections.find((s) => s.type === type)?.content || {};
+    return localResume.sections.find((s) => s.type === type)?.content || {};
+  };
+
+  // Reorder list items (experience, project, education, language, reference, etc.)
+  const moveItem = (sectionType: string, index: number, direction: 'up' | 'down') => {
+    const content = getSectionContent(sectionType);
+    let listKey = '';
+    if (sectionType === 'experience') listKey = 'experiences';
+    else if (sectionType === 'projects') listKey = 'projects';
+    else if (sectionType === 'education') listKey = 'educations';
+    else if (sectionType === 'certifications') listKey = 'certifications';
+    else if (sectionType === 'languages') listKey = 'languages';
+    else if (sectionType === 'references') listKey = 'references';
+    else if (sectionType === 'custom') listKey = 'customSections';
+
+    if (!listKey) return;
+
+    const list = [...(content[listKey] || [])];
+    if (direction === 'up' && index > 0) {
+      const temp = list[index];
+      list[index] = list[index - 1];
+      list[index - 1] = temp;
+    } else if (direction === 'down' && index < list.length - 1) {
+      const temp = list[index];
+      list[index] = list[index + 1];
+      list[index + 1] = temp;
+    }
+
+    updateSection(sectionType, { [listKey]: list });
+  };
+
+  // Reorder entire sections (e.g. move Skills above Summary)
+  const moveSection = (index: number, direction: 'up' | 'down') => {
+    const sorted = [...localResume.sections].sort((a, b) => a.order - b.order);
+    if (direction === 'up' && index > 0) {
+      const temp = sorted[index].order;
+      sorted[index].order = sorted[index - 1].order;
+      sorted[index - 1].order = temp;
+    } else if (direction === 'down' && index < sorted.length - 1) {
+      const temp = sorted[index].order;
+      sorted[index].order = sorted[index + 1].order;
+      sorted[index + 1].order = temp;
+    }
+    
+    // Normalize order index
+    const updated = sorted
+      .sort((a, b) => a.order - b.order)
+      .map((sec, idx) => ({ ...sec, order: idx }));
+
+    updateResumeData({ ...localResume, sections: updated });
+  };
+
+  const toggleSectionVisibility = (sectionId: string) => {
+    const updated = localResume.sections.map((s) => {
+      if (s.id === sectionId) {
+        return { ...s, visible: !s.visible };
+      }
+      return s;
+    });
+    updateResumeData({ ...localResume, sections: updated });
   };
 
   return (
@@ -319,7 +589,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               <Label htmlFor="quick-job-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Target Job:</Label>
               <Select value={selectedJob} onValueChange={(v) => {
                 setSelectedJob(v);
-                updateResumeData({ ...resume, jobDescriptionId: v });
+                updateResumeData({ ...localResume, jobDescriptionId: v });
               }}>
                 <SelectTrigger id="quick-job-select" className="h-8 text-xs font-semibold rounded-lg border-slate-200 bg-white min-w-[140px] max-w-[180px]">
                   <SelectValue placeholder="Select target..." />
@@ -422,29 +692,37 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <Input
                         id="edit-email"
                         type="email"
+                        className={cn(!isValidEmail(getSectionContent('header').header?.email) && "border-red-500 focus-visible:ring-red-500")}
                         value={getSectionContent('header').header?.email || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, email: e.target.value }
                         })}
                       />
+                      {!isValidEmail(getSectionContent('header').header?.email) && (
+                        <span className="text-[10px] text-red-500 font-medium block">Please enter a valid email address.</span>
+                      )}
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-phone">Phone Number</Label>
-                      <Input
-                        id="edit-phone"
-                        value={getSectionContent('header').header?.phone || ''}
-                        onChange={(e) => updateSection('header', {
-                          header: { ...getSectionContent('header').header, phone: e.target.value }
+                    <div className="col-span-2">
+                      <CountryLocationFields
+                        compact
+                        countryCode={getSectionContent('header').header?.countryCode || ''}
+                        locationFields={getSectionContent('header').header?.locationFields || {}}
+                        phone={getSectionContent('header').header?.phone || ''}
+                        targetCountryCode={getSectionContent('header').header?.targetCountryCode || ''}
+                        onCountryChange={(code) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, countryCode: code }
                         })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-location">Location</Label>
-                      <Input
-                        id="edit-location"
-                        value={getSectionContent('header').header?.location || ''}
-                        onChange={(e) => updateSection('header', {
-                          header: { ...getSectionContent('header').header, location: e.target.value }
+                        onTargetCountryChange={(code) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, targetCountryCode: code }
+                        })}
+                        onLocationFieldChange={(fields) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, locationFields: fields }
+                        })}
+                        onPhoneChange={(phone) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, phone }
+                        })}
+                        onLocationStringChange={(location) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, location }
                         })}
                       />
                     </div>
@@ -458,6 +736,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         <Input
                           id="edit-linkedin"
                           placeholder="linkedin.com/in/username"
+                          className={cn(!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'linkedin')?.url) && "border-red-500 focus-visible:ring-red-500")}
                           value={getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'linkedin')?.url || ''}
                           onChange={(e) => {
                             const headerObj = getSectionContent('header').header || {};
@@ -478,12 +757,16 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             });
                           }}
                         />
+                        {!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'linkedin')?.url) && (
+                          <span className="text-[10px] text-red-500 font-medium block">Please enter a valid URL.</span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="edit-github">GitHub URL</Label>
                         <Input
                           id="edit-github"
                           placeholder="github.com/username"
+                          className={cn(!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'github')?.url) && "border-red-500 focus-visible:ring-red-500")}
                           value={getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'github')?.url || ''}
                           onChange={(e) => {
                             const headerObj = getSectionContent('header').header || {};
@@ -504,12 +787,16 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             });
                           }}
                         />
+                        {!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'github')?.url) && (
+                          <span className="text-[10px] text-red-500 font-medium block">Please enter a valid URL.</span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="edit-portfolio">Portfolio Website URL</Label>
                         <Input
                           id="edit-portfolio"
                           placeholder="yourportfolio.com"
+                          className={cn(!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'portfolio' || l.label.toLowerCase() === 'website')?.url) && "border-red-500 focus-visible:ring-red-500")}
                           value={getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'portfolio' || l.label.toLowerCase() === 'website')?.url || ''}
                           onChange={(e) => {
                             const headerObj = getSectionContent('header').header || {};
@@ -530,6 +817,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             });
                           }}
                         />
+                        {!isValidUrl(getSectionContent('header').header?.links?.find((l: any) => l.label.toLowerCase() === 'portfolio' || l.label.toLowerCase() === 'website')?.url) && (
+                          <span className="text-[10px] text-red-500 font-medium block">Please enter a valid URL.</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -615,12 +905,34 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <div key={exp.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-500">Job Position #{idx + 1}</span>
-                          <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
-                            const list = (getSectionContent('experience').experiences || []).filter((e: any) => e.id !== exp.id);
-                            updateSection('experience', { experiences: list });
-                          }}>
-                            Delete
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('experience', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('experience', idx, 'down')}
+                              disabled={idx === (getSectionContent('experience').experiences || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('experience').experiences || []).filter((e: any) => e.id !== exp.id);
+                              updateSection('experience', { experiences: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -722,12 +1034,34 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <div key={proj.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-500">Project #{idx + 1}</span>
-                          <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
-                            const list = (getSectionContent('projects').projects || []).filter((p: any) => p.id !== proj.id);
-                            updateSection('projects', { projects: list });
-                          }}>
-                            Delete
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('projects', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('projects', idx, 'down')}
+                              disabled={idx === (getSectionContent('projects').projects || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('projects').projects || []).filter((p: any) => p.id !== proj.id);
+                              updateSection('projects', { projects: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -768,12 +1102,16 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             <Label className="text-xs">Link URL</Label>
                             <Input
                               value={proj.link}
+                              className={cn(!isValidUrl(proj.link) && "border-red-500 focus-visible:ring-red-500")}
                               onChange={(e) => {
                                 const list = [...getSectionContent('projects').projects];
                                 list[idx].link = e.target.value;
                                 updateSection('projects', { projects: list });
                               }}
                             />
+                            {!isValidUrl(proj.link) && (
+                              <span className="text-[10px] text-red-500 font-medium block">Please enter a valid URL.</span>
+                            )}
                           </div>
                         </div>
 
@@ -813,12 +1151,34 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <div key={edu.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-500">Education #{idx + 1}</span>
-                          <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
-                            const list = (getSectionContent('education').educations || []).filter((e: any) => e.id !== edu.id);
-                            updateSection('education', { educations: list });
-                          }}>
-                            Delete
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('education', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('education', idx, 'down')}
+                              disabled={idx === (getSectionContent('education').educations || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('education').educations || []).filter((e: any) => e.id !== edu.id);
+                              updateSection('education', { educations: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -902,12 +1262,34 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <div key={cert.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-500">Certification #{idx + 1}</span>
-                          <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
-                            const list = (getSectionContent('certifications').certifications || []).filter((c: any) => c.id !== cert.id);
-                            updateSection('certifications', { certifications: list });
-                          }}>
-                            Delete
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('certifications', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('certifications', idx, 'down')}
+                              disabled={idx === (getSectionContent('certifications').certifications || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('certifications').certifications || []).filter((c: any) => c.id !== cert.id);
+                              updateSection('certifications', { certifications: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -948,13 +1330,484 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             <Label className="text-xs">Credential Link</Label>
                             <Input
                               value={cert.link}
+                              className={cn(!isValidUrl(cert.link) && "border-red-500 focus-visible:ring-red-500")}
                               onChange={(e) => {
                                 const list = [...getSectionContent('certifications').certifications];
                                 list[idx].link = e.target.value;
                                 updateSection('certifications', { certifications: list });
                               }}
                             />
+                            {!isValidUrl(cert.link) && (
+                              <span className="text-[10px] text-red-500 font-medium block">Please enter a valid URL.</span>
+                            )}
                           </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+
+                {/* LANGUAGES TAB */}
+                <TabsContent value="languages" className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-base font-medium">Languages Spoken</h3>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const cur = getSectionContent('languages').languages || [];
+                      updateSection('languages', {
+                        languages: [...cur, { language: '', proficiency: '' }]
+                      });
+                    }}>
+                      Add Language
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {(getSectionContent('languages').languages || []).map((lang: any, idx: number) => (
+                      <div key={idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-500">Language #{idx + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('languages', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('languages', idx, 'down')}
+                              disabled={idx === (getSectionContent('languages').languages || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('languages').languages || []).filter((_: any, i: number) => i !== idx);
+                              updateSection('languages', { languages: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Language *</Label>
+                            <Input
+                              value={lang.language}
+                              placeholder="e.g. French"
+                              onChange={(e) => {
+                                const list = [...getSectionContent('languages').languages];
+                                list[idx].language = e.target.value;
+                                updateSection('languages', { languages: list });
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Proficiency</Label>
+                            <Input
+                              value={lang.proficiency}
+                              placeholder="e.g. Professional Working, Native"
+                              onChange={(e) => {
+                                const list = [...getSectionContent('languages').languages];
+                                list[idx].proficiency = e.target.value;
+                                updateSection('languages', { languages: list });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(getSectionContent('languages').languages || []).length === 0 && (
+                      <p className="text-xs text-slate-400 italic">No languages added. Add languages to showcase bilingual or multilingual skills.</p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* REFERENCES TAB */}
+                <TabsContent value="references" className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-base font-medium">Professional References</h3>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const cur = getSectionContent('references').references || [];
+                      updateSection('references', {
+                        references: [...cur, { id: nanoid(), name: '', company: '', title: '', email: '', phone: '', availableOnRequest: false }]
+                      });
+                    }}>
+                      Add Reference
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {(getSectionContent('references').references || []).map((ref: any, idx: number) => (
+                      <div key={ref.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-500">Reference #{idx + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('references', idx, 'up')}
+                              disabled={idx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('references', idx, 'down')}
+                              disabled={idx === (getSectionContent('references').references || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8" onClick={() => {
+                              const list = (getSectionContent('references').references || []).filter((r: any) => r.id !== ref.id);
+                              updateSection('references', { references: list });
+                            }}>
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 pb-1">
+                          <input
+                            type="checkbox"
+                            id={`ref-available-${ref.id}`}
+                            checked={ref.availableOnRequest}
+                            onChange={(e) => {
+                              const list = [...getSectionContent('references').references];
+                              list[idx].availableOnRequest = e.target.checked;
+                              updateSection('references', { references: list });
+                            }}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                          />
+                          <Label htmlFor={`ref-available-${ref.id}`} className="text-xs font-semibold text-slate-700 cursor-pointer">
+                            Available upon request
+                          </Label>
+                        </div>
+
+                        {!ref.availableOnRequest && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Name *</Label>
+                              <Input
+                                value={ref.name}
+                                placeholder="e.g. Jane Doe"
+                                onChange={(e) => {
+                                  const list = [...getSectionContent('references').references];
+                                  list[idx].name = e.target.value;
+                                  updateSection('references', { references: list });
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Company</Label>
+                              <Input
+                                value={ref.company}
+                                placeholder="e.g. Google"
+                                onChange={(e) => {
+                                  const list = [...getSectionContent('references').references];
+                                  list[idx].company = e.target.value;
+                                  updateSection('references', { references: list });
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Title</Label>
+                              <Input
+                                value={ref.title}
+                                placeholder="e.g. Director of Engineering"
+                                onChange={(e) => {
+                                  const list = [...getSectionContent('references').references];
+                                  list[idx].title = e.target.value;
+                                  updateSection('references', { references: list });
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Email</Label>
+                              <Input
+                                type="email"
+                                value={ref.email}
+                                placeholder="jane.doe@example.com"
+                                className={cn(!isValidEmail(ref.email) && "border-red-500 focus-visible:ring-red-500")}
+                                onChange={(e) => {
+                                  const list = [...getSectionContent('references').references];
+                                  list[idx].email = e.target.value;
+                                  updateSection('references', { references: list });
+                                }}
+                              />
+                              {!isValidEmail(ref.email) && (
+                                <span className="text-[9px] text-red-500 font-semibold block">Invalid email format.</span>
+                              )}
+                            </div>
+                            <div className="space-y-1 col-span-2">
+                              <Label className="text-xs">Phone</Label>
+                              <Input
+                                value={ref.phone}
+                                placeholder="e.g. +1 (555) 019-2834"
+                                className={cn(!isValidPhone(ref.phone) && "border-red-500 focus-visible:ring-red-500")}
+                                onChange={(e) => {
+                                  const list = [...getSectionContent('references').references];
+                                  list[idx].phone = e.target.value;
+                                  updateSection('references', { references: list });
+                                }}
+                              />
+                              {!isValidPhone(ref.phone) && (
+                                <span className="text-[9px] text-red-500 font-semibold block">Invalid phone number.</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {(getSectionContent('references').references || []).length === 0 && (
+                      <p className="text-xs text-slate-400 italic">No references added. Add references or select "Available upon request".</p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* CUSTOM SECTIONS TAB */}
+                <TabsContent value="custom" className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-base font-medium">Custom Sections</h3>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const cur = getSectionContent('custom').customSections || [];
+                      updateSection('custom', {
+                        customSections: [...cur, { id: nanoid(), title: '', items: [] }]
+                      });
+                    }}>
+                      Add Custom Section
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {(getSectionContent('custom').customSections || []).map((sect: any, sectIdx: number) => (
+                      <div key={sect.id || sectIdx} className="border border-slate-200 p-4 rounded-lg space-y-4 bg-slate-50/50">
+                        <div className="flex justify-between items-center gap-3">
+                          <div className="flex-1 max-w-sm">
+                            <Label className="text-xs font-bold text-slate-500">Section Title *</Label>
+                            <Input
+                              value={sect.title}
+                              placeholder="e.g. Volunteer Work, Patents"
+                              className="font-bold h-9 mt-1"
+                              onChange={(e) => {
+                                const list = [...getSectionContent('custom').customSections];
+                                list[sectIdx].title = e.target.value;
+                                updateSection('custom', { customSections: list });
+                              }}
+                            />
+                          </div>
+                          
+                          <div className="flex items-center gap-2 mt-5">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('custom', sectIdx, 'up')}
+                              disabled={sectIdx === 0}
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700" 
+                              onClick={() => moveItem('custom', sectIdx, 'down')}
+                              disabled={sectIdx === (getSectionContent('custom').customSections || []).length - 1}
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 h-8 font-bold" onClick={() => {
+                              const list = (getSectionContent('custom').customSections || []).filter((s: any) => s.id !== sect.id);
+                              updateSection('custom', { customSections: list });
+                            }}>
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Items in custom section */}
+                        <div className="space-y-3 bg-white border border-slate-100 p-3 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Section Items</span>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                              const list = [...getSectionContent('custom').customSections];
+                              list[sectIdx].items = [...(list[sectIdx].items || []), { id: nanoid(), title: '', subtitle: '', description: '' }];
+                              updateSection('custom', { customSections: list });
+                            }}>
+                              Add Item
+                            </Button>
+                          </div>
+
+                          <div className="space-y-3">
+                            {(sect.items || []).map((item: any, itemIdx: number) => (
+                              <div key={item.id || itemIdx} className="border border-slate-100 p-3 rounded-md bg-slate-50 space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-bold text-slate-400">Item #{itemIdx + 1}</span>
+                                  <div className="flex items-center gap-1">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-6 w-6 text-slate-400 hover:text-slate-600" 
+                                      onClick={() => {
+                                        const list = [...getSectionContent('custom').customSections];
+                                        const items = [...list[sectIdx].items];
+                                        if (itemIdx > 0) {
+                                          const tmp = items[itemIdx];
+                                          items[itemIdx] = items[itemIdx - 1];
+                                          items[itemIdx - 1] = tmp;
+                                          list[sectIdx].items = items;
+                                          updateSection('custom', { customSections: list });
+                                        }
+                                      }}
+                                      disabled={itemIdx === 0}
+                                    >
+                                      <ArrowUp className="w-3 h-3" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-6 w-6 text-slate-400 hover:text-slate-600" 
+                                      onClick={() => {
+                                        const list = [...getSectionContent('custom').customSections];
+                                        const items = [...list[sectIdx].items];
+                                        if (itemIdx < items.length - 1) {
+                                          const tmp = items[itemIdx];
+                                          items[itemIdx] = items[itemIdx + 1];
+                                          items[itemIdx + 1] = tmp;
+                                          list[sectIdx].items = items;
+                                          updateSection('custom', { customSections: list });
+                                        }
+                                      }}
+                                      disabled={itemIdx === (sect.items || []).length - 1}
+                                    >
+                                      <ArrowDown className="w-3 h-3" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={() => {
+                                      const list = [...getSectionContent('custom').customSections];
+                                      list[sectIdx].items = list[sectIdx].items.filter((i: any) => i.id !== item.id);
+                                      updateSection('custom', { customSections: list });
+                                    }}>
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px]">Item Title *</Label>
+                                    <Input
+                                      value={item.title}
+                                      placeholder="e.g. Volunteer"
+                                      className="h-8 text-xs"
+                                      onChange={(e) => {
+                                        const list = [...getSectionContent('custom').customSections];
+                                        list[sectIdx].items[itemIdx].title = e.target.value;
+                                        updateSection('custom', { customSections: list });
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px]">Subtitle / Organization</Label>
+                                    <Input
+                                      value={item.subtitle}
+                                      placeholder="e.g. Red Cross"
+                                      className="h-8 text-xs"
+                                      onChange={(e) => {
+                                        const list = [...getSectionContent('custom').customSections];
+                                        list[sectIdx].items[itemIdx].subtitle = e.target.value;
+                                        updateSection('custom', { customSections: list });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px]">Description</Label>
+                                  <Textarea
+                                    value={item.description || ''}
+                                    placeholder="e.g. Managed team of 15 volunteers..."
+                                    className="text-xs"
+                                    rows={2}
+                                    onChange={(e) => {
+                                      const list = [...getSectionContent('custom').customSections];
+                                      list[sectIdx].items[itemIdx].description = e.target.value;
+                                      updateSection('custom', { customSections: list });
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(getSectionContent('custom').customSections || []).length === 0 && (
+                      <p className="text-xs text-slate-400 italic">No custom sections added. Add volunteer work, certifications, patents, or publications.</p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* LAYOUT TAB */}
+                <TabsContent value="layout" className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-base font-medium">Section Order & Visibility</h3>
+                    <p className="text-xs text-slate-500">Arrange and show/hide resume sections</p>
+                  </div>
+                  <div className="space-y-2 border border-slate-250 rounded-xl p-4 bg-slate-50/50">
+                    {[...localResume.sections].sort((a, b) => a.order - b.order).map((sec, idx, sortedList) => (
+                      <div key={sec.id} className="flex items-center justify-between bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-slate-400 w-5">#{idx + 1}</span>
+                          <span className="text-sm font-semibold capitalize text-slate-700">
+                            {sec.type === 'custom' ? `Custom Sections` : sec.type === 'certifications' ? 'Certifications (Credentials)' : sec.type}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {/* Toggle visibility */}
+                          <div className="flex items-center gap-1.5 mr-2">
+                            <input
+                              type="checkbox"
+                              id={`vis-${sec.id}`}
+                              checked={sec.visible}
+                              onChange={() => toggleSectionVisibility(sec.id)}
+                              className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                            />
+                            <label htmlFor={`vis-${sec.id}`} className="text-xs font-medium text-slate-500 cursor-pointer select-none">
+                              {sec.visible ? 'Visible' : 'Hidden'}
+                            </label>
+                          </div>
+                          {/* Move up / down */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                            onClick={() => moveSection(idx, 'up')}
+                            disabled={idx === 0 || sec.type === 'header'} // header is usually locked at top
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                            onClick={() => moveSection(idx, 'down')}
+                            disabled={idx === sortedList.length - 1 || sec.type === 'header'}
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -1088,7 +1941,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </Button>
             
             <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-              Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1} of 8
+              Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1} of {WIZARD_STEPS.length}
             </div>
 
             <Button
@@ -1102,7 +1955,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 h-10 rounded-xl"
             >
-              {activeEditTab === 'achievements' ? 'Finish & Export' : 'Next Step'}
+              {activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key ? 'Finish & Export' : 'Next Step'}
             </Button>
           </div>
         </Card>
@@ -1190,7 +2043,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
           <div className="flex-1 overflow-hidden flex">
-            <ResumePreview resume={resume} templateId={selectedTemplate} zoom={zoom} />
+            <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} />
           </div>
         </Card>
       </div>

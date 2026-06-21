@@ -1,5 +1,5 @@
 // Resume Section Types
-export type ResumeSectionType = 'header' | 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements';
+export type ResumeSectionType = 'header' | 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements' | 'languages' | 'references' | 'custom';
 
 export interface ResumeHeader {
   name: string;
@@ -7,6 +7,10 @@ export interface ResumeHeader {
   phone: string;
   location: string;
   links: { label: string; url: string }[];
+  // Structured location fields (optional — backward compatible)
+  countryCode?: string;                    // ISO 3166-1 alpha-2 (e.g. "IN", "US")
+  locationFields?: Record<string, string>; // e.g. { state: "Kerala", city: "Kochi", postalCode: "682001" }
+  targetCountryCode?: string;              // ISO 3166-1 alpha-2 (e.g. "US", "CA")
 }
 
 export interface SkillCategory {
@@ -50,6 +54,34 @@ export interface Certification {
   link?: string;
 }
 
+export interface Language {
+  language: string;
+  proficiency: string; // e.g. Native, Fluent, Conversational
+}
+
+export interface Reference {
+  id: string;
+  name: string;
+  company: string;
+  title: string;
+  email: string;
+  phone: string;
+  availableOnRequest: boolean;
+}
+
+export interface CustomSectionItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+}
+
+export interface CustomSection {
+  id: string;
+  title: string;
+  items: CustomSectionItem[];
+}
+
 export interface ResumeSection {
   id: string;
   type: ResumeSectionType;
@@ -64,6 +96,9 @@ export interface ResumeSection {
     educations?: Education[];
     certifications?: Certification[];
     achievements?: string[];
+    languages?: Language[];
+    references?: Reference[];
+    customSections?: CustomSection[];
   };
 }
 
@@ -127,6 +162,9 @@ export interface ParsedResume {
   educations: Education[];
   certifications: Certification[];
   achievements?: string[];
+  languages?: Language[];
+  references?: Reference[];
+  customSections?: CustomSection[];
 }
 
 // API Response Types

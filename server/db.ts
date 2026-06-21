@@ -4,7 +4,9 @@ import {
   InsertUser, users, resumes, InsertResumeDb, jobDescriptions, InsertJobDescriptionDb, subscriptions, supportTickets,
   organizations, InsertOrganizationDb, organizationMembers, InsertOrganizationMemberDb,
   marketplaceItems, InsertMarketplaceItemDb, affiliateReferrals, InsertAffiliateReferralDb,
-  recruiterJobs, InsertRecruiterJobDb, jobApplications, InsertJobApplicationDb
+  recruiterJobs, InsertRecruiterJobDb, jobApplications, InsertJobApplicationDb,
+  countries, states, districts, cities, countrySettings, countryPhoneCodes, countryAtsRules,
+  guestSessions, resumeHistory, cloudBackups
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -14,11 +16,19 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const url = process.env.DATABASE_URL;
+      if (url.startsWith("mysql://") || url.startsWith("mysql2://")) {
+        _db = drizzle(url);
+      } else {
+        _db = null;
+      }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
+  }
+  if (_db) {
+    seedCountryData(_db).catch(err => console.error("[Database Seeding Error]", err));
   }
   return _db;
 }
@@ -66,7 +76,17 @@ export const mockDb = {
   ] as any[],
   supportTickets: [
     { id: "tkt-1", userId: 2, title: "Custom domain mapping issue", description: "Subdomain for white label returns 404.", status: "open", priority: "high", createdAt: new Date(), updatedAt: new Date() }
-  ] as any[]
+  ] as any[],
+  countries: [] as any[],
+  states: [] as any[],
+  districts: [] as any[],
+  cities: [] as any[],
+  countrySettings: [] as any[],
+  countryPhoneCodes: [] as any[],
+  countryAtsRules: [] as any[],
+  guestSessions: [] as any[],
+  resumeHistory: [] as any[],
+  cloudBackups: [] as any[]
 };
 
 // ==========================================
@@ -629,6 +649,15 @@ export async function listJobApplications(jobId: string) {
   return db.select().from(jobApplications).where(eq(jobApplications.jobId, jobId)).orderBy(desc(jobApplications.matchScore));
 }
 
+export async function getJobApplication(id: string) {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.jobApplications.find(a => a.id === id);
+  }
+  const result = await db.select().from(jobApplications).where(eq(jobApplications.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function updateApplicationStatus(id: string, status: string) {
   const db = await getDb();
   if (!db) {
@@ -757,9 +786,15 @@ export async function resolveSupportTicket(id: string, status: string = "resolve
 export async function getAnalyticsSummary() {
   const db = await getDb();
   if (!db) {
+    const totalGuests = mockDb.guestSessions.length + 42; // base offset
+    const converted = mockDb.guestSessions.filter(s => s.convertedUserId !== null).length + 12;
+    const activeReg = mockDb.users.length;
+    const activeGuest = mockDb.guestSessions.length;
     return {
       totalUsers: mockDb.users.length,
-      activeUsers: Math.max(1, mockDb.users.length - 1),
+      totalGuests,
+      conversionRate: Math.round((converted / Math.max(1, totalGuests)) * 100),
+      activeUsers: activeReg + activeGuest,
       resumesCreated: mockDb.resumes.length + 8, // base offset for visuals
       pdfDownloads: (mockDb.resumes.length + 8) * 2,
       subscriptionRevenue: mockDb.subscriptions.filter(s => s.status === "active").reduce((acc, curr) => {
@@ -777,10 +812,25 @@ export async function getAnalyticsSummary() {
     const activePremiumCount = await db.select({ count: sql<number>`count(*)` }).from(subscriptions).where(
       eq(subscriptions.status, "active")
     );
+    const totalGuestsRes = await db.select({ count: sql<number>`count(*)` }).from(guestSessions);
+    const convertedGuestsRes = await db.select({ count: sql<number>`count(*)` }).from(guestSessions).where(
+      sql`${guestSessions.convertedUserId} IS NOT NULL`
+    );
+    const activeGuestsRes = await db.select({ count: sql<number>`count(*)` }).from(guestSessions).where(
+      sql`${guestSessions.lastActiveAt} > DATE_SUB(NOW(), INTERVAL 30 DAY)`
+    );
+
+    const totalGuests = Number(totalGuestsRes[0]?.count || 0);
+    const convertedGuests = Number(convertedGuestsRes[0]?.count || 0);
+    const activeGuests = Number(activeGuestsRes[0]?.count || 0);
+    const activeReg = Number(activeCount[0]?.count || 0);
+    const totalReg = Number(userCount[0]?.count || 0);
 
     return {
-      totalUsers: Number(userCount[0]?.count || 0),
-      activeUsers: Number(activeCount[0]?.count || 0),
+      totalUsers: totalReg,
+      totalGuests,
+      conversionRate: totalGuests > 0 ? Math.round((convertedGuests / totalGuests) * 100) : 0,
+      activeUsers: activeReg + activeGuests,
       resumesCreated: Number(resumeCount[0]?.count || 0),
       pdfDownloads: Math.round(Number(resumeCount[0]?.count || 0) * 1.5),
       subscriptionRevenue: Number(activePremiumCount[0]?.count || 0) * 19,
@@ -789,6 +839,8 @@ export async function getAnalyticsSummary() {
     console.warn("[Analytics] Queries failed, using default mock stats:", error);
     return {
       totalUsers: 15,
+      totalGuests: 42,
+      conversionRate: 28,
       activeUsers: 8,
       resumesCreated: 24,
       pdfDownloads: 48,
@@ -826,3 +878,867 @@ export async function getCRMUsersList() {
   }
   return detailed;
 }
+
+// ============================================================================
+// GLOBAL COUNTRY & LOCATION QUERIES & MUTATIONS (PRODUCTION-READY)
+// ============================================================================
+import { 
+  ALL_COUNTRIES, DEFAULT_ATS_RULES, INDIAN_STATES, INDIAN_DISTRICTS, US_STATES, 
+  UK_COUNTRIES, UK_COUNTIES, CANADIAN_PROVINCES, UAE_EMIRATES, AUSTRALIAN_STATES,
+  GERMAN_STATES, SAUDI_REGIONS
+} from "../shared/countriesData";
+
+// Seeder logic for Live Drizzle MySQL Connection
+export async function seedCountryData(db: any) {
+  try {
+    const existingCountries = await db.select().from(countries).limit(1);
+    if (existingCountries.length > 0) return;
+
+    console.log("[Database Seeding] Seeding country and location structures...");
+
+    const countryIdMap = new Map<string, number>();
+
+    for (const c of ALL_COUNTRIES) {
+      await db.insert(countries).values({
+        code: c.code,
+        name: c.name,
+        flag: c.flag,
+        dialCode: c.dialCode,
+        phoneFormat: c.phoneFormat,
+        phoneRegex: c.phoneRegex,
+        postalCodeLabel: c.postalCodeLabel,
+        postalCodeFormat: c.postalCodeFormat,
+        dateFormat: c.dateFormat,
+        addressFormat: c.addressFormat,
+        nationality: c.nationality,
+        isPriority: c.isPriority,
+        isActive: c.isActive
+      });
+
+      const inserted = await db.select({ id: countries.id }).from(countries).where(eq(countries.code, c.code)).limit(1);
+      const countryId = inserted[0].id;
+      countryIdMap.set(c.code, countryId);
+
+      // Seed settings
+      await db.insert(countrySettings).values({
+        countryId,
+        dateFormat: c.dateFormat,
+        addressFormat: c.addressFormat,
+        resumeStyle: c.isPriority ? "Executive Tailored" : "Generic Professional",
+        languagePreferences: JSON.stringify(["en"])
+      });
+
+      // Seed phone prefix format rules
+      await db.insert(countryPhoneCodes).values({
+        countryId,
+        dialCode: c.dialCode,
+        validationRegex: c.phoneRegex
+      });
+    }
+
+    // Seed priority country states & district structures
+    const inId = countryIdMap.get('IN');
+    if (inId) {
+      for (const sName of INDIAN_STATES) {
+        await db.insert(states).values({ countryId: inId, name: sName });
+        const insertedState = await db.select({ id: states.id }).from(states).where(and(eq(states.countryId, inId), eq(states.name, sName))).limit(1);
+        const stateId = insertedState[0].id;
+
+        const dsts = INDIAN_DISTRICTS[sName] || [];
+        for (const dName of dsts) {
+          await db.insert(districts).values({ stateId, name: dName });
+        }
+      }
+    }
+
+    const usId = countryIdMap.get('US');
+    if (usId) {
+      for (const sName of US_STATES) {
+        await db.insert(states).values({ countryId: usId, name: sName });
+      }
+    }
+
+    const ukId = countryIdMap.get('GB');
+    if (ukId) {
+      for (const sName of UK_COUNTRIES) {
+        await db.insert(states).values({ countryId: ukId, name: sName });
+      }
+    }
+
+    const caId = countryIdMap.get('CA');
+    if (caId) {
+      for (const sName of CANADIAN_PROVINCES) {
+        await db.insert(states).values({ countryId: caId, name: sName });
+      }
+    }
+
+    const uaeId = countryIdMap.get('AE');
+    if (uaeId) {
+      for (const sName of UAE_EMIRATES) {
+        await db.insert(states).values({ countryId: uaeId, name: sName });
+      }
+    }
+
+    const auId = countryIdMap.get('AU');
+    if (auId) {
+      for (const sName of AUSTRALIAN_STATES) {
+        await db.insert(states).values({ countryId: auId, name: sName });
+      }
+    }
+
+    const deId = countryIdMap.get('DE');
+    if (deId) {
+      for (const sName of GERMAN_STATES) {
+        await db.insert(states).values({ countryId: deId, name: sName });
+      }
+    }
+
+    const saId = countryIdMap.get('SA');
+    if (saId) {
+      for (const sName of SAUDI_REGIONS) {
+        await db.insert(states).values({ countryId: saId, name: sName });
+      }
+    }
+
+    // Seed default ATS mapping rules
+    for (const r of DEFAULT_ATS_RULES) {
+      const sourceId = countryIdMap.get(r.sourceCountryCode);
+      const targetId = countryIdMap.get(r.targetCountryCode);
+      if (sourceId && targetId) {
+        await db.insert(countryAtsRules).values({
+          countryId: sourceId,
+          targetCountryId: targetId,
+          keywords: JSON.stringify(r.keywords),
+          preferredFormatting: r.preferredFormatting,
+          regionalHiringExpectations: r.regionalHiringExpectations,
+          regionalTerminology: JSON.stringify(r.regionalTerminology)
+        });
+      }
+    }
+
+    console.log("[Database Seeding] Seeding completed successfully.");
+  } catch (error) {
+    console.error("[Database Seeding] Error during seed seeding:", error);
+  }
+}
+
+// Fallback in-memory seeder
+export function seedMockDb() {
+  if (mockDb.countries.length > 0) return;
+
+  ALL_COUNTRIES.forEach((c) => {
+    const countryId = mockDb.countries.length + 1;
+    mockDb.countries.push({
+      id: countryId,
+      code: c.code,
+      name: c.name,
+      flag: c.flag,
+      dialCode: c.dialCode,
+      phoneFormat: c.phoneFormat,
+      phoneRegex: c.phoneRegex,
+      postalCodeLabel: c.postalCodeLabel,
+      postalCodeFormat: c.postalCodeFormat,
+      dateFormat: c.dateFormat,
+      addressFormat: c.addressFormat,
+      nationality: c.nationality,
+      isPriority: c.isPriority,
+      isActive: c.isActive,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    mockDb.countryPhoneCodes.push({
+      id: mockDb.countryPhoneCodes.length + 1,
+      countryId,
+      dialCode: c.dialCode,
+      validationRegex: c.phoneRegex,
+      createdAt: new Date()
+    });
+
+    mockDb.countrySettings.push({
+      id: mockDb.countrySettings.length + 1,
+      countryId,
+      dateFormat: c.dateFormat,
+      addressFormat: c.addressFormat,
+      resumeStyle: c.isPriority ? "Executive Tailored" : "Generic Professional",
+      languagePreferences: JSON.stringify(["en"]),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+  });
+
+  const inCountry = mockDb.countries.find(c => c.code === 'IN');
+  if (inCountry) {
+    INDIAN_STATES.forEach(sName => {
+      const stateId = mockDb.states.length + 1;
+      mockDb.states.push({
+        id: stateId,
+        countryId: inCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+      const dsts = INDIAN_DISTRICTS[sName] || [];
+      dsts.forEach(dName => {
+        mockDb.districts.push({
+          id: mockDb.districts.length + 1,
+          stateId,
+          name: dName,
+          createdAt: new Date()
+        });
+      });
+    });
+  }
+
+  const usCountry = mockDb.countries.find(c => c.code === 'US');
+  if (usCountry) {
+    US_STATES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: usCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const ukCountry = mockDb.countries.find(c => c.code === 'GB');
+  if (ukCountry) {
+    UK_COUNTRIES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: ukCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const caCountry = mockDb.countries.find(c => c.code === 'CA');
+  if (caCountry) {
+    CANADIAN_PROVINCES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: caCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const uaeCountry = mockDb.countries.find(c => c.code === 'AE');
+  if (uaeCountry) {
+    UAE_EMIRATES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: uaeCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const auCountry = mockDb.countries.find(c => c.code === 'AU');
+  if (auCountry) {
+    AUSTRALIAN_STATES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: auCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const deCountry = mockDb.countries.find(c => c.code === 'DE');
+  if (deCountry) {
+    GERMAN_STATES.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: deCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  const saCountry = mockDb.countries.find(c => c.code === 'SA');
+  if (saCountry) {
+    SAUDI_REGIONS.forEach(sName => {
+      mockDb.states.push({
+        id: mockDb.states.length + 1,
+        countryId: saCountry.id,
+        name: sName,
+        createdAt: new Date()
+      });
+    });
+  }
+
+  DEFAULT_ATS_RULES.forEach(r => {
+    const sC = mockDb.countries.find(c => c.code === r.sourceCountryCode);
+    const tC = mockDb.countries.find(c => c.code === r.targetCountryCode);
+    if (sC && tC) {
+      mockDb.countryAtsRules.push({
+        id: mockDb.countryAtsRules.length + 1,
+        countryId: sC.id,
+        targetCountryId: tC.id,
+        keywords: JSON.stringify(r.keywords),
+        preferredFormatting: r.preferredFormatting,
+        regionalHiringExpectations: r.regionalHiringExpectations,
+        regionalTerminology: JSON.stringify(r.regionalTerminology),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+  });
+}
+
+// Auto seed the mock db
+seedMockDb();
+
+// Public CRUD Helpers
+export async function getCountries() {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.countries.filter(c => c.isActive);
+  }
+  return db.select().from(countries).where(eq(countries.isActive, true)).orderBy(countries.isPriority, countries.name);
+}
+
+export async function getAllCountriesAdmin() {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.countries;
+  }
+  return db.select().from(countries).orderBy(countries.name);
+}
+
+export async function getStatesByCountry(countryIdOrCode: string | number) {
+  const db = await getDb();
+  if (typeof countryIdOrCode === 'string') {
+    if (!db) {
+      const c = mockDb.countries.find(x => x.code.toUpperCase() === countryIdOrCode.toUpperCase());
+      if (!c) return [];
+      return mockDb.states.filter(s => s.countryId === c.id);
+    }
+    const cResult = await db.select().from(countries).where(eq(countries.code, countryIdOrCode)).limit(1);
+    if (cResult.length === 0) return [];
+    return db.select().from(states).where(eq(states.countryId, cResult[0].id));
+  } else {
+    if (!db) {
+      return mockDb.states.filter(s => s.countryId === countryIdOrCode);
+    }
+    return db.select().from(states).where(eq(states.countryId, countryIdOrCode));
+  }
+}
+
+export async function getDistrictsByState(stateId: number) {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.districts.filter(d => d.stateId === stateId);
+  }
+  return db.select().from(districts).where(eq(districts.stateId, stateId));
+}
+
+export async function getCitiesByState(stateId: number) {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.cities.filter(c => c.stateId === stateId);
+  }
+  return db.select().from(cities).where(eq(cities.stateId, stateId));
+}
+
+export async function getCountrySettings(countryCodeOrId: string | number) {
+  const db = await getDb();
+  if (typeof countryCodeOrId === 'string') {
+    if (!db) {
+      const c = mockDb.countries.find(x => x.code.toUpperCase() === countryCodeOrId.toUpperCase());
+      if (!c) return null;
+      const set = mockDb.countrySettings.find(s => s.countryId === c.id);
+      return set ? { ...set, languagePreferences: JSON.parse(set.languagePreferences) } : null;
+    }
+    const cResult = await db.select().from(countries).where(eq(countries.code, countryCodeOrId)).limit(1);
+    if (cResult.length === 0) return null;
+    const settingsResult = await db.select().from(countrySettings).where(eq(countrySettings.countryId, cResult[0].id)).limit(1);
+    return settingsResult.length > 0 ? settingsResult[0] : null;
+  } else {
+    if (!db) {
+      const set = mockDb.countrySettings.find(s => s.countryId === countryCodeOrId);
+      return set ? { ...set, languagePreferences: JSON.parse(set.languagePreferences) } : null;
+    }
+    const result = await db.select().from(countrySettings).where(eq(countrySettings.countryId, countryCodeOrId)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  }
+}
+
+export async function getCountryAtsRules(sourceCode: string, targetCode: string) {
+  const db = await getDb();
+  
+  if (!db) {
+    const sC = mockDb.countries.find(c => c.code.toUpperCase() === sourceCode.toUpperCase());
+    const tC = mockDb.countries.find(c => c.code.toUpperCase() === targetCode.toUpperCase());
+    if (!sC || !tC) return null;
+    const rule = mockDb.countryAtsRules.find(r => r.countryId === sC.id && r.targetCountryId === tC.id);
+    return rule ? {
+      ...rule,
+      keywords: JSON.parse(rule.keywords),
+      regionalTerminology: JSON.parse(rule.regionalTerminology)
+    } : null;
+  }
+
+  const sResult = await db.select({ id: countries.id }).from(countries).where(eq(countries.code, sourceCode)).limit(1);
+  const tResult = await db.select({ id: countries.id }).from(countries).where(eq(countries.code, targetCode)).limit(1);
+  if (sResult.length === 0 || tResult.length === 0) return null;
+
+  const rulesResult = await db.select().from(countryAtsRules).where(
+    and(
+      eq(countryAtsRules.countryId, sResult[0].id),
+      eq(countryAtsRules.targetCountryId, tResult[0].id)
+    )
+  ).limit(1);
+  
+  return rulesResult.length > 0 ? rulesResult[0] : null;
+}
+
+export async function insertCountry(data: any) {
+  const db = await getDb();
+  if (!db) {
+    const nextId = mockDb.countries.length + 1;
+    const newC = {
+      id: nextId,
+      code: data.code,
+      name: data.name,
+      flag: data.flag || "🌐",
+      dialCode: data.dialCode || "",
+      phoneFormat: data.phoneFormat || "",
+      phoneRegex: data.phoneRegex || "^\\d+$",
+      postalCodeLabel: data.postalCodeLabel || "Postal Code",
+      postalCodeFormat: data.postalCodeFormat || "",
+      dateFormat: data.dateFormat || "DD/MM/YYYY",
+      addressFormat: data.addressFormat || "{city}, {state}, {country}",
+      nationality: data.nationality || "",
+      isPriority: data.isPriority || false,
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    mockDb.countries.push(newC);
+    
+    mockDb.countrySettings.push({
+      id: mockDb.countrySettings.length + 1,
+      countryId: nextId,
+      dateFormat: newC.dateFormat,
+      addressFormat: newC.addressFormat,
+      resumeStyle: "Generic Professional",
+      languagePreferences: JSON.stringify(["en"]),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    mockDb.countryPhoneCodes.push({
+      id: mockDb.countryPhoneCodes.length + 1,
+      countryId: nextId,
+      dialCode: newC.dialCode,
+      validationRegex: newC.phoneRegex,
+      createdAt: new Date()
+    });
+
+    return newC;
+  }
+
+  await db.insert(countries).values(data);
+  const result = await db.select().from(countries).where(eq(countries.code, data.code)).limit(1);
+  const dbCountryId = result[0].id;
+
+  await db.insert(countrySettings).values({
+    countryId: dbCountryId,
+    dateFormat: data.dateFormat || "DD/MM/YYYY",
+    addressFormat: data.addressFormat || "{city}, {state}, {country}",
+    resumeStyle: "Generic Professional",
+    languagePreferences: JSON.stringify(["en"])
+  });
+
+  await db.insert(countryPhoneCodes).values({
+    countryId: dbCountryId,
+    dialCode: data.dialCode || "",
+    validationRegex: data.phoneRegex || "^\\d+$"
+  });
+
+  return result[0];
+}
+
+export async function updateCountry(id: number, data: any) {
+  const db = await getDb();
+  if (!db) {
+    const idx = mockDb.countries.findIndex(c => c.id === id);
+    if (idx > -1) {
+      mockDb.countries[idx] = {
+        ...mockDb.countries[idx],
+        ...data,
+        updatedAt: new Date()
+      };
+      return mockDb.countries[idx];
+    }
+    return null;
+  }
+  await db.update(countries).set(data).where(eq(countries.id, id));
+  const result = await db.select().from(countries).where(eq(countries.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function saveCountryAtsRule(data: any) {
+  const db = await getDb();
+  const ruleData = {
+    countryId: data.countryId,
+    targetCountryId: data.targetCountryId,
+    keywords: typeof data.keywords === 'string' ? data.keywords : JSON.stringify(data.keywords),
+    preferredFormatting: data.preferredFormatting,
+    regionalHiringExpectations: data.regionalHiringExpectations,
+    regionalTerminology: typeof data.regionalTerminology === 'string' ? data.regionalTerminology : JSON.stringify(data.regionalTerminology),
+    updatedAt: new Date()
+  };
+
+  if (!db) {
+    const idx = mockDb.countryAtsRules.findIndex(r => r.countryId === data.countryId && r.targetCountryId === data.targetCountryId);
+    if (idx > -1) {
+      mockDb.countryAtsRules[idx] = {
+        ...mockDb.countryAtsRules[idx],
+        ...ruleData
+      };
+      return mockDb.countryAtsRules[idx];
+    } else {
+      const newRule = {
+        id: mockDb.countryAtsRules.length + 1,
+        ...ruleData,
+        createdAt: new Date()
+      };
+      mockDb.countryAtsRules.push(newRule);
+      return newRule;
+    }
+  }
+
+  const existing = await db.select().from(countryAtsRules).where(
+    and(
+      eq(countryAtsRules.countryId, data.countryId),
+      eq(countryAtsRules.targetCountryId, data.targetCountryId)
+    )
+  ).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(countryAtsRules).set(ruleData).where(
+      and(
+        eq(countryAtsRules.countryId, data.countryId),
+        eq(countryAtsRules.targetCountryId, data.targetCountryId)
+      )
+    );
+  } else {
+    await db.insert(countryAtsRules).values({
+      ...ruleData,
+      createdAt: new Date()
+    });
+  }
+
+  const result = await db.select().from(countryAtsRules).where(
+    and(
+      eq(countryAtsRules.countryId, data.countryId),
+      eq(countryAtsRules.targetCountryId, data.targetCountryId)
+    )
+  ).limit(1);
+  return result[0];
+}
+
+export async function saveCountryPhoneRule(countryId: number, dialCode: string, regex: string) {
+  const db = await getDb();
+  if (!db) {
+    const idx = mockDb.countryPhoneCodes.findIndex(p => p.countryId === countryId);
+    if (idx > -1) {
+      mockDb.countryPhoneCodes[idx].dialCode = dialCode;
+      mockDb.countryPhoneCodes[idx].validationRegex = regex;
+      // update country flag fields
+      const cIdx = mockDb.countries.findIndex(c => c.id === countryId);
+      if (cIdx > -1) {
+        mockDb.countries[cIdx].dialCode = dialCode;
+        mockDb.countries[cIdx].phoneRegex = regex;
+      }
+      return mockDb.countryPhoneCodes[idx];
+    } else {
+      const newPhone = {
+        id: mockDb.countryPhoneCodes.length + 1,
+        countryId,
+        dialCode,
+        validationRegex: regex,
+        createdAt: new Date()
+      };
+      mockDb.countryPhoneCodes.push(newPhone);
+      return newPhone;
+    }
+  }
+
+  const existing = await db.select().from(countryPhoneCodes).where(eq(countryPhoneCodes.countryId, countryId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(countryPhoneCodes).set({ dialCode, validationRegex: regex }).where(eq(countryPhoneCodes.countryId, countryId));
+  } else {
+    await db.insert(countryPhoneCodes).values({ countryId, dialCode, validationRegex: regex });
+  }
+
+  await db.update(countries).set({ dialCode, phoneRegex: regex }).where(eq(countries.id, countryId));
+
+  const result = await db.select().from(countryPhoneCodes).where(eq(countryPhoneCodes.countryId, countryId)).limit(1);
+  return result[0];
+}
+
+export async function saveCountryLocalizationRule(countryId: number, dateFormat: string, addressFormat: string, resumeStyle: string, langPrefs: any) {
+  const db = await getDb();
+  const settingsData = {
+    countryId,
+    dateFormat,
+    addressFormat,
+    resumeStyle,
+    languagePreferences: typeof langPrefs === 'string' ? langPrefs : JSON.stringify(langPrefs),
+    updatedAt: new Date()
+  };
+
+  if (!db) {
+    const idx = mockDb.countrySettings.findIndex(s => s.countryId === countryId);
+    if (idx > -1) {
+      mockDb.countrySettings[idx] = {
+        ...mockDb.countrySettings[idx],
+        ...settingsData
+      };
+      // update country
+      const cIdx = mockDb.countries.findIndex(c => c.id === countryId);
+      if (cIdx > -1) {
+        mockDb.countries[cIdx].dateFormat = dateFormat;
+        mockDb.countries[cIdx].addressFormat = addressFormat;
+      }
+      return mockDb.countrySettings[idx];
+    } else {
+      const newSettings = {
+        id: mockDb.countrySettings.length + 1,
+        ...settingsData,
+        createdAt: new Date()
+      };
+      mockDb.countrySettings.push(newSettings);
+      return newSettings;
+    }
+  }
+
+  const existing = await db.select().from(countrySettings).where(eq(countrySettings.countryId, countryId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(countrySettings).set(settingsData).where(eq(countrySettings.countryId, countryId));
+  } else {
+    await db.insert(countrySettings).values({
+      ...settingsData,
+      createdAt: new Date()
+    });
+  }
+
+  await db.update(countries).set({ dateFormat, addressFormat }).where(eq(countries.id, countryId));
+
+  const result = await db.select().from(countrySettings).where(eq(countrySettings.countryId, countryId)).limit(1);
+  return result[0];
+}
+
+// ============================================================================
+// OPTIONAL AUTHENTICATION & GUEST FLOW DB METHODS
+// ============================================================================
+
+export async function trackGuestSession(id: string, deviceUid: string) {
+  const db = await getDb();
+  const sessionData = {
+    id,
+    deviceUid,
+    lastActiveAt: new Date(),
+  };
+
+  if (!db) {
+    const existing = mockDb.guestSessions.find(s => s.id === id);
+    if (existing) {
+      existing.lastActiveAt = new Date();
+      existing.deviceUid = deviceUid;
+      return existing;
+    } else {
+      const newSession = {
+        ...sessionData,
+        createdAt: new Date(),
+        convertedUserId: null,
+        convertedAt: null,
+      };
+      mockDb.guestSessions.push(newSession);
+      return newSession;
+    }
+  }
+
+  const existing = await db.select().from(guestSessions).where(eq(guestSessions.id, id)).limit(1);
+  if (existing.length > 0) {
+    await db.update(guestSessions).set({
+      lastActiveAt: new Date(),
+      deviceUid,
+    }).where(eq(guestSessions.id, id));
+  } else {
+    await db.insert(guestSessions).values({
+      ...sessionData,
+      createdAt: new Date(),
+    });
+  }
+
+  const res = await db.select().from(guestSessions).where(eq(guestSessions.id, id)).limit(1);
+  return res[0];
+}
+
+export async function convertGuestSession(id: string, userId: number) {
+  const db = await getDb();
+  const conversion = {
+    convertedUserId: userId,
+    convertedAt: new Date(),
+    lastActiveAt: new Date(),
+  };
+
+  if (!db) {
+    const existing = mockDb.guestSessions.find(s => s.id === id);
+    if (existing) {
+      Object.assign(existing, conversion);
+      return existing;
+    }
+    return null;
+  }
+
+  await db.update(guestSessions).set(conversion).where(eq(guestSessions.id, id));
+  const res = await db.select().from(guestSessions).where(eq(guestSessions.id, id)).limit(1);
+  return res.length > 0 ? res[0] : null;
+}
+
+export async function saveResumeHistory(userId: number, resumeId: string, title: string, templateId: string, content: string) {
+  const db = await getDb();
+  const id = Math.random().toString(36).substr(2, 9);
+  
+  let nextVersion = 1;
+  if (!db) {
+    const history = mockDb.resumeHistory.filter(h => h.resumeId === resumeId && h.userId === userId);
+    if (history.length > 0) {
+      nextVersion = Math.max(...history.map(h => h.version)) + 1;
+    }
+    const newHistory = {
+      id,
+      resumeId,
+      userId,
+      version: nextVersion,
+      title,
+      content: typeof content === 'string' ? content : JSON.stringify(content),
+      createdAt: new Date()
+    };
+    mockDb.resumeHistory.push(newHistory);
+    return newHistory;
+  }
+
+  const history = await db.select({ version: resumeHistory.version }).from(resumeHistory).where(
+    and(eq(resumeHistory.resumeId, resumeId), eq(resumeHistory.userId, userId))
+  );
+  if (history.length > 0) {
+    nextVersion = Math.max(...history.map(h => h.version)) + 1;
+  }
+
+  const newHistory = {
+    id,
+    resumeId,
+    userId,
+    version: nextVersion,
+    title,
+    content: typeof content === 'string' ? content : JSON.stringify(content),
+    createdAt: new Date()
+  };
+
+  await db.insert(resumeHistory).values(newHistory);
+  return newHistory;
+}
+
+export async function getResumeHistory(resumeId: string, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.resumeHistory
+      .filter(h => h.resumeId === resumeId && h.userId === userId)
+      .sort((a, b) => b.version - a.version);
+  }
+
+  return db.select().from(resumeHistory).where(
+    and(eq(resumeHistory.resumeId, resumeId), eq(resumeHistory.userId, userId))
+  ).orderBy(desc(resumeHistory.version));
+}
+
+export async function saveCloudBackup(userId: number, type: string, name: string, content: any) {
+  const db = await getDb();
+  const id = Math.random().toString(36).substr(2, 9);
+  const backupData = {
+    userId,
+    type,
+    name,
+    content: typeof content === 'string' ? content : JSON.stringify(content),
+    updatedAt: new Date()
+  };
+
+  if (!db) {
+    const existing = mockDb.cloudBackups.find(b => b.userId === userId && b.type === type && b.name === name);
+    if (existing) {
+      Object.assign(existing, backupData);
+      return existing;
+    } else {
+      const newBackup = {
+        id,
+        ...backupData,
+        createdAt: new Date()
+      };
+      mockDb.cloudBackups.push(newBackup);
+      return newBackup;
+    }
+  }
+
+  const existing = await db.select().from(cloudBackups).where(
+    and(
+      eq(cloudBackups.userId, userId),
+      eq(cloudBackups.type, type),
+      eq(cloudBackups.name, name)
+    )
+  ).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(cloudBackups).set(backupData).where(eq(cloudBackups.id, existing[0].id));
+    const res = await db.select().from(cloudBackups).where(eq(cloudBackups.id, existing[0].id)).limit(1);
+    return res[0];
+  } else {
+    const newBackup = {
+      id,
+      ...backupData,
+      createdAt: new Date()
+    };
+    await db.insert(cloudBackups).values(newBackup);
+    return newBackup;
+  }
+}
+
+export async function listCloudBackups(userId: number, type: string) {
+  const db = await getDb();
+  if (!db) {
+    return mockDb.cloudBackups.filter(b => b.userId === userId && b.type === type).sort((a,b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  }
+
+  return db.select().from(cloudBackups).where(
+    and(eq(cloudBackups.userId, userId), eq(cloudBackups.type, type))
+  ).orderBy(desc(cloudBackups.updatedAt));
+}
+
+export async function deleteCloudBackup(id: string, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    const idx = mockDb.cloudBackups.findIndex(b => b.id === id && b.userId === userId);
+    if (idx > -1) {
+      mockDb.cloudBackups.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
+  await db.delete(cloudBackups).where(
+    and(eq(cloudBackups.id, id), eq(cloudBackups.userId, userId))
+  );
+  return true;
+}
+

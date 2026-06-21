@@ -22,6 +22,9 @@ export default function JobBoard({ activeResume }: JobBoardProps) {
 
   const listJobsQuery = trpc.recruiter.listJobs.useQuery({});
   const applyMutation = trpc.recruiter.submitApplication.useMutation();
+  const updateResumeMutation = trpc.resume.update.useMutation();
+  const improveBulletsMutation = trpc.ai.improveBullets.useMutation();
+  const utils = trpc.useUtils();
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,14 +53,54 @@ export default function JobBoard({ activeResume }: JobBoardProps) {
   };
 
   const handleAutoTune = async (job: any) => {
+    if (!activeResume) {
+      toast.error("Please create a resume draft in the builder first!");
+      return;
+    }
+
     toast.info(`Tuning resume alignment for: "${job.title}"...`);
     try {
-      // Simulate AI aligning sections
-      setTimeout(() => {
-        toast.success("Resume structure tuned! Experience bullets rephrased for job targets.");
-      }, 1500);
-    } catch (e) {
-      toast.error("Failed to auto-tune resume");
+      const resumeObj = JSON.parse(activeResume.content);
+      const experienceSection = resumeObj.sections?.find((s: any) => s.type === "experience");
+      if (!experienceSection || !experienceSection.content?.experiences || experienceSection.content.experiences.length === 0) {
+        toast.error("No experiences found on your active resume to tune.");
+        return;
+      }
+
+      const experiences = experienceSection.content.experiences;
+      const updatedExperiences = [];
+
+      for (const exp of experiences) {
+        toast.info(`Optimizing bullets for ${exp.role} at ${exp.company}...`);
+        
+        // Call backend improveBullets
+        const improved = await improveBulletsMutation.mutateAsync({
+          role: exp.role || "",
+          company: exp.company || "",
+          currentBullets: exp.description || [],
+          jobDescription: job.requirements || job.description || "",
+        });
+
+        updatedExperiences.push({
+          ...exp,
+          description: improved,
+        });
+      }
+
+      // Update the section content
+      experienceSection.content.experiences = updatedExperiences;
+
+      // Update resume content on server
+      await updateResumeMutation.mutateAsync({
+        id: activeResume.id,
+        content: JSON.stringify(resumeObj),
+      });
+
+      toast.success("Resume structure successfully auto-tuned and saved!");
+      utils.resume.list.invalidate();
+    } catch (e: any) {
+      console.error("Auto-tune error:", e);
+      toast.error("Failed to auto-tune resume: " + e.message);
     }
   };
 

@@ -8,12 +8,16 @@ import Landing from "./pages/Landing";
 import ResumeBuilder from "./pages/ResumeBuilder";
 import Documentation from "./pages/Documentation";
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Landing} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/builder" component={ResumeBuilder} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/dashboard/:sub*" component={Dashboard} />

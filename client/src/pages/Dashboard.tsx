@@ -13,6 +13,8 @@ import JobBoard from "@/components/JobBoard";
 import AffiliateSystem from "@/components/AffiliateSystem";
 import BillingPortal from "@/components/BillingPortal";
 import AdminCRM from "@/components/AdminCRM";
+import StripeCheckoutSimulation from "@/components/StripeCheckoutSimulation";
+import UserSettings from "@/components/UserSettings";
 import { FileText, Plus, Zap, Award, Sparkles, Building, Store, CreditCard, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -96,6 +98,16 @@ export default function Dashboard() {
         {/* Subscriptions upgrade grid */}
         <Route path="/dashboard/billing">
           <BillingPortal resumesCount={resumes.length} />
+        </Route>
+
+        {/* Stripe simulated checkout session */}
+        <Route path="/dashboard/billing/checkout">
+          <StripeCheckoutSimulation />
+        </Route>
+
+        {/* Account configurations & User Settings */}
+        <Route path="/dashboard/settings">
+          <UserSettings />
         </Route>
 
         {/* Master CRM admin views */}

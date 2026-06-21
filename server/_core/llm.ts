@@ -212,14 +212,23 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+const resolveApiUrl = () => {
+  if (!ENV.forgeApiKey) {
+    if (ENV.grokApiKey) {
+      return "https://api.groq.com/openai/v1/chat/completions";
+    }
+    if (ENV.geminiApiKey) {
+      return "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions";
+    }
+  }
+  return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
+};
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  if (!ENV.forgeApiKey && !ENV.grokApiKey && !ENV.geminiApiKey) {
+    throw new Error("No API key is configured. Please set BUILT_IN_FORGE_API_KEY, GROK_API_KEY, or GEMINI_API_KEY in .env");
   }
 };
 
@@ -362,8 +371,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     messages: messages.map(normalizeMessage),
   };
 
-  if (model) {
-    payload.model = model;
+  // Determine key & default model if none specified
+  let apiKey = ENV.forgeApiKey;
+  let activeModel = model;
+
+  if (!apiKey) {
+    if (ENV.grokApiKey) {
+      apiKey = ENV.grokApiKey;
+      activeModel = model || "llama3-8b-8192";
+    } else if (ENV.geminiApiKey) {
+      apiKey = ENV.geminiApiKey;
+      activeModel = model || "gemini-1.5-flash";
+    }
+  }
+
+  if (activeModel) {
+    payload.model = activeModel;
   }
 
   if (tools && tools.length > 0) {
@@ -405,7 +428,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -435,12 +458,23 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+  let url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
     : "https://forge.manus.im/v1/models";
+  let apiKey = ENV.forgeApiKey;
+
+  if (!apiKey) {
+    if (ENV.grokApiKey) {
+      url = "https://api.groq.com/openai/v1/models";
+      apiKey = ENV.grokApiKey;
+    } else if (ENV.geminiApiKey) {
+      url = "https://generativelanguage.googleapis.com/v1beta/openai/v1/models";
+      apiKey = ENV.geminiApiKey;
+    }
+  }
 
   const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
+    headers: { authorization: `Bearer ${apiKey}` },
   });
 
   if (!response.ok) {

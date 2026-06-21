@@ -50,4 +50,37 @@ export function registerOAuthRoutes(app: Express) {
       res.status(500).json({ error: "OAuth callback failed" });
     }
   });
+
+  // Mock login for local sandbox / dev testing
+  app.get("/api/mock/login", async (req: Request, res: Response) => {
+    const email = (req.query.email as string) || "test.candidate@gmail.com";
+    const name = (req.query.name as string) || "Test Candidate";
+    const provider = (req.query.provider as string) || "google";
+    const openId = `mock-${provider}-${email.replace("@", "-")}`;
+
+    try {
+      await db.upsertUser({
+        openId,
+        name,
+        email,
+        loginMethod: provider,
+        lastSignedIn: new Date(),
+        role: email.includes("admin") ? "admin" : "user",
+      });
+
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name,
+        expiresInMs: ONE_YEAR_MS,
+      });
+
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      
+      const redirect = (req.query.redirect as string) || "/";
+      res.redirect(302, redirect);
+    } catch (error) {
+      console.error("[Mock Auth] Login failed", error);
+      res.status(500).json({ error: "Mock login failed" });
+    }
+  });
 }

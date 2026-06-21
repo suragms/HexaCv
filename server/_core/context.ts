@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import { sdk } from "./sdk";
+import * as db from "../db";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -16,23 +17,16 @@ export async function createContext(
   try {
     user = await sdk.authenticateRequest(opts.req);
   } catch (error) {
-    // Authentication is optional for public procedures.
-    // In development mode, fallback to mock user so dashboard APIs work without active session
-    if (process.env.NODE_ENV === "development") {
-      user = {
-        id: 1,
-        openId: "admin-key-owner",
-        name: "Surag",
-        email: "surag@hexastacksolutions.com",
-        loginMethod: "oauth",
-        role: "admin",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastSignedIn: new Date(),
-      };
-    } else {
-      user = null;
-    }
+    user = null;
+  }
+
+  const guestSessionId = opts.req.headers["x-guest-session-id"] as string | undefined;
+  const deviceUid = opts.req.headers["x-device-uid"] as string | undefined;
+
+  if (guestSessionId && deviceUid && !user) {
+    db.trackGuestSession(guestSessionId, deviceUid).catch((err) => {
+      console.error("[Context] Failed to track guest session:", err);
+    });
   }
 
   return {

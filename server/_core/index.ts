@@ -9,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { configureSecurity } from "../middleware/security";
+import { registerStripeWebhook } from "../stripeWebhook";
+import { registerCountryRoutes } from "../countryRoutes";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,15 +34,38 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Catch malformed URI errors at the absolute top of the middleware stack
+  // to prevent subsequent routed layers from throwing unhandled URIErrors on match.
+  app.use((req, res, next) => {
+    try {
+      decodeURIComponent(req.path);
+      next();
+    } catch (err) {
+      if (err instanceof URIError) {
+        console.warn(`Malformed URI sequence in request URL: ${req.url}`);
+        res.status(400).send("Bad Request: Malformed URI");
+        return;
+      }
+      next(err);
+    }
+  });
   
   // Configure security headers and rate limits
   configureSecurity(app);
+
+  // Register Stripe webhook before body parsers to access raw request streams
+  registerStripeWebhook(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  
+  // Register Global Country Management System REST APIs
+  registerCountryRoutes(app);
+
   // tRPC API
   app.use(
     "/api/trpc",

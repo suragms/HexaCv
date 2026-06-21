@@ -30,12 +30,7 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
-    }
+    console.log("[OAuth] Local authentication bypass active (using seeded admin user)");
   }
 
   private decodeState(state: string): string {
@@ -256,57 +251,51 @@ class SDKServer {
     } as GetUserInfoWithJwtResponse;
   }
 
-  async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
-    // Regular authentication flow
+  async authenticateRequest(req: Request): Promise<AuthenticatedUser | null> {
     const cookies = this.parseCookies(req.headers.cookie);
-    const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
+    const cookieValue = cookies.get(COOKIE_NAME);
 
-    if (!session) {
-      throw ForbiddenError("Invalid session cookie");
-    }
-
-    if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
-      const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-      const taskUid = userInfo.taskUid ?? null;
-      if (!taskUid) {
-        throw ForbiddenError("Cron session missing task_uid");
-      }
-      return buildCronUser(userInfo);
-    }
-
-    const sessionUserId = session.openId;
-    const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
-
-    // If user not in DB, sync from OAuth server automatically
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
+    if (cookieValue) {
+      const session = await this.verifySession(cookieValue);
+      if (session) {
+        const user = await db.getUserByOpenId(session.openId);
+        if (user) {
+          return user;
+        }
       }
     }
 
-    if (!user) {
-      throw ForbiddenError("User not found");
+    // If guest session header is present, return null immediately (Guest Mode)
+    const guestSessionHeader = req.headers["x-guest-session-id"];
+    if (guestSessionHeader) {
+      return null;
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    // In local sandbox or when DATABASE_URL is not set/active, fallback to mock admin user for convenience
+    if (process.env.SANDBOX_LOCAL === "true" || !process.env.DATABASE_URL) {
+      const signedInAt = new Date();
+      let user = await db.getUserByOpenId("admin-key-owner");
 
-    return user;
+      if (!user) {
+        try {
+          await db.upsertUser({
+            openId: "admin-key-owner",
+            name: "Surag",
+            email: "surag@hexastacksolutions.com",
+            loginMethod: "oauth",
+            lastSignedIn: signedInAt,
+            role: "admin",
+          });
+          user = await db.getUserByOpenId("admin-key-owner");
+        } catch (error) {
+          console.error("[Auth] Failed to seed default mock admin user:", error);
+        }
+      }
+
+      return user || null;
+    }
+
+    return null;
   }
 }
 

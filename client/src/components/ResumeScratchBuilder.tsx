@@ -8,13 +8,14 @@ import { Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { ParsedResume, Experience, Project, Education, Certification, SkillCategory } from '@shared/types';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
+import CountryLocationFields from './CountryLocationFields';
 
 interface ResumeScratchBuilderProps {
   onComplete: (data: any) => void;
 }
 
 export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilderProps) {
-  const [currentStep, setCurrentStep] = useState<'header' | 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements' | 'review'>('header');
+  const [currentStep, setCurrentStep] = useState<'header' | 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements' | 'languages' | 'references' | 'custom' | 'review'>('header');
 
   const [header, setHeader] = useState({
     name: '',
@@ -25,6 +26,9 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
     linkedin: '',
     github: '',
     portfolio: '',
+    countryCode: '',
+    targetCountryCode: '',
+    locationFields: {} as Record<string, string>,
   });
 
   const [summary, setSummary] = useState('');
@@ -38,6 +42,10 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [achievements, setAchievements] = useState<string[]>([]);
   const [achievementInput, setAchievementInput] = useState('');
+  
+  const [languages, setLanguages] = useState<any[]>([]);
+  const [references, setReferences] = useState<any[]>([]);
+  const [customSections, setCustomSections] = useState<any[]>([]);
 
   const steps = [
     { id: 'header', label: 'Header', icon: '👤' },
@@ -48,6 +56,9 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
     { id: 'education', label: 'Education', icon: '🎓' },
     { id: 'certifications', label: 'Certifications', icon: '📜' },
     { id: 'achievements', label: 'Achievements', icon: '🏆' },
+    { id: 'languages', label: 'Languages', icon: '🌐' },
+    { id: 'references', label: 'References', icon: '👥' },
+    { id: 'custom', label: 'Custom', icon: '⚙️' },
     { id: 'review', label: 'Review', icon: '✓' },
   ];
 
@@ -121,6 +132,24 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
     ]);
   };
 
+  const handleAddLanguage = () => {
+    setLanguages([...languages, { language: '', proficiency: 'Full Professional' }]);
+  };
+
+  const handleAddReference = () => {
+    setReferences([...references, { id: nanoid(), name: '', company: '', title: '', email: '', phone: '', availableOnRequest: false }]);
+  };
+
+  const handleAddCustomSection = () => {
+    setCustomSections([...customSections, { id: nanoid(), title: 'Volunteer Work', items: [{ id: nanoid(), title: '', subtitle: '', description: '' }] }]);
+  };
+
+  const handleAddCustomItem = (sectIdx: number) => {
+    const list = [...customSections];
+    list[sectIdx].items.push({ id: nanoid(), title: '', subtitle: '', description: '' });
+    setCustomSections(list);
+  };
+
   const handleFinish = () => {
     if (!header.name || !header.email) {
       toast.error('Please complete your name and email in the Header step.');
@@ -141,7 +170,10 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
         email: header.email,
         phone: header.phone,
         location: header.location,
-        links: finalLinks
+        links: finalLinks,
+        countryCode: header.countryCode,
+        targetCountryCode: header.targetCountryCode,
+        locationFields: header.locationFields,
       },
       summary,
       skills,
@@ -149,7 +181,10 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
       projects,
       educations,
       certifications,
-      achievements
+      achievements,
+      languages,
+      references,
+      customSections
     };
 
     onComplete(payload as any);
@@ -190,6 +225,9 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'education' && 'Add your degree, school, and academic achievements.'}
             {currentStep === 'certifications' && 'List relevant certifications and professional courses.'}
             {currentStep === 'achievements' && 'List key quantified achievements.'}
+            {currentStep === 'languages' && 'List languages you speak and your proficiency levels.'}
+            {currentStep === 'references' && 'Add professional references or mark them available upon request.'}
+            {currentStep === 'custom' && 'Create any additional custom sections.'}
             {currentStep === 'review' && 'Verify details before loading into the live resume editor.'}
           </CardDescription>
         </CardHeader>
@@ -226,22 +264,17 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                     onChange={(e) => setHeader({ ...header, email: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    placeholder="+1 (555) 123-4567"
-                    value={header.phone}
-                    onChange={(e) => setHeader({ ...header, phone: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    placeholder="San Francisco, CA"
-                    value={header.location}
-                    onChange={(e) => setHeader({ ...header, location: e.target.value })}
+                <div className="col-span-1 md:col-span-2">
+                  <CountryLocationFields
+                    countryCode={header.countryCode}
+                    locationFields={header.locationFields}
+                    phone={header.phone}
+                    targetCountryCode={header.targetCountryCode}
+                    onCountryChange={(code) => setHeader({ ...header, countryCode: code })}
+                    onTargetCountryChange={(code) => setHeader({ ...header, targetCountryCode: code })}
+                    onLocationFieldChange={(fields) => setHeader({ ...header, locationFields: fields })}
+                    onPhoneChange={(phone) => setHeader({ ...header, phone })}
+                    onLocationStringChange={(location) => setHeader({ ...header, location })}
                   />
                 </div>
               </div>
@@ -755,6 +788,281 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             </div>
           )}
 
+          {/* Languages Step */}
+          {currentStep === 'languages' && (
+            <div className="space-y-4">
+              {languages.map((lang, idx) => (
+                <div key={idx} className="border border-slate-200 rounded-lg p-4 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-800">Language #{idx + 1}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLanguages(languages.filter((_, i) => i !== idx))}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Language *</Label>
+                      <Input
+                        placeholder="e.g. Spanish"
+                        value={lang.language}
+                        onChange={(e) => {
+                          const newLangs = [...languages];
+                          newLangs[idx].language = e.target.value;
+                          setLanguages(newLangs);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label>Proficiency *</Label>
+                      <Input
+                        placeholder="e.g. Native, Fluent, Conversational"
+                        value={lang.proficiency}
+                        onChange={(e) => {
+                          const newLangs = [...languages];
+                          newLangs[idx].proficiency = e.target.value;
+                          setLanguages(newLangs);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                onClick={handleAddLanguage}
+                className="w-full gap-2 border-dashed"
+              >
+                <Plus className="w-4 h-4" />
+                Add Language
+              </Button>
+            </div>
+          )}
+
+          {/* References Step */}
+          {currentStep === 'references' && (
+            <div className="space-y-4">
+              {references.map((ref, idx) => (
+                <div key={ref.id} className="border border-slate-200 rounded-lg p-4 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-800">Reference #{idx + 1}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setReferences(references.filter((r) => r.id !== ref.id))}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`available-${ref.id}`}
+                      checked={ref.availableOnRequest}
+                      onChange={(e) => {
+                        const newRefs = [...references];
+                        newRefs[idx].availableOnRequest = e.target.checked;
+                        setReferences(newRefs);
+                      }}
+                      className="w-4 h-4 font-semibold text-emerald-600 rounded focus:ring-emerald-500"
+                    />
+                    <label htmlFor={`available-${ref.id}`} className="text-sm font-medium">Available on request</label>
+                  </div>
+                  {!ref.availableOnRequest && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Name *</Label>
+                        <Input
+                          placeholder="e.g. Jane Doe"
+                          value={ref.name}
+                          onChange={(e) => {
+                            const newRefs = [...references];
+                            newRefs[idx].name = e.target.value;
+                            setReferences(newRefs);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Company</Label>
+                        <Input
+                          placeholder="e.g. Acme Corp"
+                          value={ref.company}
+                          onChange={(e) => {
+                            const newRefs = [...references];
+                            newRefs[idx].company = e.target.value;
+                            setReferences(newRefs);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Title / Position</Label>
+                        <Input
+                          placeholder="e.g. Engineering Manager"
+                          value={ref.title}
+                          onChange={(e) => {
+                            const newRefs = [...references];
+                            newRefs[idx].title = e.target.value;
+                            setReferences(newRefs);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <Input
+                          type="email"
+                          placeholder="jane.doe@example.com"
+                          value={ref.email}
+                          onChange={(e) => {
+                            const newRefs = [...references];
+                            newRefs[idx].email = e.target.value;
+                            setReferences(newRefs);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Phone</Label>
+                        <Input
+                          placeholder="e.g. +1 (555) 019-2834"
+                          value={ref.phone}
+                          onChange={(e) => {
+                            const newRefs = [...references];
+                            newRefs[idx].phone = e.target.value;
+                            setReferences(newRefs);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                onClick={handleAddReference}
+                className="w-full gap-2 border-dashed"
+              >
+                <Plus className="w-4 h-4" />
+                Add Reference
+              </Button>
+            </div>
+          )}
+
+          {/* Custom Sections Step */}
+          {currentStep === 'custom' && (
+            <div className="space-y-6">
+              {customSections.map((sect, sectIdx) => (
+                <div key={sect.id} className="border border-slate-300 rounded-lg p-5 space-y-4 bg-slate-50/50">
+                  <div className="flex justify-between items-center">
+                    <div className="w-2/3">
+                      <Label>Section Title *</Label>
+                      <Input
+                        placeholder="e.g. Volunteer Work, Publications"
+                        value={sect.title}
+                        className="font-semibold text-base"
+                        onChange={(e) => {
+                          const list = [...customSections];
+                          list[sectIdx].title = e.target.value;
+                          setCustomSections(list);
+                        }}
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCustomSections(customSections.filter((s) => s.id !== sect.id))}
+                      className="text-red-500 hover:text-red-700 mt-6"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" /> Delete Section
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4 mt-2">
+                    <Label className="text-sm font-semibold text-slate-700">Items</Label>
+                    {sect.items.map((item: any, itemIdx: number) => (
+                      <div key={item.id} className="border border-slate-200 bg-white rounded-lg p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-slate-500">Item #{itemIdx + 1}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const list = [...customSections];
+                              list[sectIdx].items = list[sectIdx].items.filter((i: any) => i.id !== item.id);
+                              setCustomSections(list);
+                            }}
+                            className="text-red-400 hover:text-red-600 h-6 px-2"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Item Title *</Label>
+                            <Input
+                              placeholder="e.g. Volunteer Coordinator"
+                              value={item.title}
+                              onChange={(e) => {
+                                const list = [...customSections];
+                                list[sectIdx].items[itemIdx].title = e.target.value;
+                                setCustomSections(list);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label>Subtitle / Organization</Label>
+                            <Input
+                              placeholder="e.g. Red Cross"
+                              value={item.subtitle}
+                              onChange={(e) => {
+                                const list = [...customSections];
+                                list[sectIdx].items[itemIdx].subtitle = e.target.value;
+                                setCustomSections(list);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Description</Label>
+                          <Textarea
+                            placeholder="Describe your role or achievements..."
+                            value={item.description}
+                            onChange={(e) => {
+                              const list = [...customSections];
+                              list[sectIdx].items[itemIdx].description = e.target.value;
+                              setCustomSections(list);
+                            }}
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    ))}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddCustomItem(sectIdx)}
+                      className="gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Item
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                onClick={handleAddCustomSection}
+                className="w-full gap-2 border-dashed"
+              >
+                <Plus className="w-4 h-4" />
+                Add Custom Section
+              </Button>
+            </div>
+          )}
+
           {/* Review Step */}
           {currentStep === 'review' && (
             <div className="space-y-4">
@@ -770,6 +1078,9 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <p><strong>Work Experience:</strong> {experiences.length} positions listed</p>
                 <p><strong>Projects:</strong> {projects.length} projects listed</p>
                 <p><strong>Educations:</strong> {educations.length} records listed</p>
+                <p><strong>Languages:</strong> {languages.length} languages added</p>
+                <p><strong>References:</strong> {references.length} references added</p>
+                <p><strong>Custom Sections:</strong> {customSections.length} sections added</p>
               </div>
             </div>
           )}

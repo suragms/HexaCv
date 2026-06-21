@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { ParsedResume } from '@shared/types';
-import { parseResumeText } from '@/lib/resumeParser';
+import { trpc } from '@/lib/trpc';
 
 interface ResumeUploaderProps {
   onParsed: (data: ParsedResume) => void;
@@ -15,6 +15,8 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const parseMutation = trpc.resume.parse.useMutation();
 
   const handleFileSelect = (selectedFile: File) => {
     setError(null);
@@ -52,97 +54,38 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
     setUploading(true);
     setError(null);
 
-    try {
-      if (file.name.endsWith('.txt')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const text = e.target?.result as string;
-            const parsed = parseResumeText(text);
-            setSuccess(true);
-            setTimeout(() => {
-              onParsed(parsed);
-            }, 1000);
-          } catch (err) {
-            setError('Failed to parse text file. Please try again.');
-          } finally {
-            setUploading(false);
-          }
-        };
-        reader.readAsText(file);
-      } else {
-        // PDF or DOCX Client-Side Extraction Simulation
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const result = e.target?.result as string;
+        const base64 = result.split(',')[1];
+        if (!base64) {
+          throw new Error('Failed to read file as base64 string.');
+        }
 
-        const mockParsed: ParsedResume = {
-          header: {
-            name: cleanName,
-            email: "candidate@hexastacksolutions.com",
-            phone: "+1 (555) 123-4567",
-            location: "San Francisco, CA",
-            links: [{ label: "LinkedIn", url: "https://linkedin.com/in/candidate" }]
-          },
-          summary: `Experienced developer with strong expertise in building scalable applications. Proven track record of delivering high-quality products.`,
-          skills: [
-            { category: "Languages", skills: ["JavaScript", "TypeScript", "HTML5", "CSS3"] },
-            { category: "Frameworks & Databases", skills: ["React", "Node.js", "Express", "PostgreSQL"] }
-          ],
-          experiences: [
-            {
-              id: "mock-exp-1",
-              company: "HexaStack Solutions",
-              role: "Software Developer",
-              startDate: "2024-01",
-              current: true,
-              description: [
-                "Developed and maintained modern web applications using React and Tailwind CSS.",
-                "Implemented secure backend API routes and database schemas in Node.js.",
-                "Optimized application performance, resulting in a 25% faster load time."
-              ]
-            }
-          ],
-          projects: [
-            {
-              id: "mock-proj-1",
-              name: "HexaCv Resume Platform",
-              description: "Designed and built an AI-powered ATS resume builder application.",
-              technologies: ["React", "TypeScript", "Tailwind CSS"],
-              link: "https://github.com/hexastack/hexacv",
-              date: "2026-05"
-            }
-          ],
-          educations: [
-            {
-              id: "mock-edu-1",
-              institution: "State Tech University",
-              degree: "Bachelor of Science",
-              field: "Computer Science",
-              graduationDate: "2023-05",
-              gpa: "3.7"
-            }
-          ],
-          certifications: [
-            {
-              id: "mock-cert-1",
-              name: "AWS Certified Developer",
-              issuer: "Amazon Web Services",
-              date: "2025-06",
-              link: ""
-            }
-          ]
-        };
+        const parsed = await parseMutation.mutateAsync({
+          filename: file.name,
+          base64,
+        });
 
         setSuccess(true);
         setTimeout(() => {
-          onParsed(mockParsed);
+          onParsed(parsed);
         }, 1000);
+      } catch (err: any) {
+        console.error('File parsing error:', err);
+        setError(err?.message || 'Failed to process file. Please try again.');
+      } finally {
         setUploading(false);
       }
-    } catch (err) {
-      setError('Failed to process file. Please try again.');
+    };
+
+    reader.onerror = () => {
+      setError('Failed to read file.');
       setUploading(false);
-    }
+    };
+
+    reader.readAsDataURL(file);
   };
 
   return (

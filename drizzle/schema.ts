@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, index } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, index, json } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -31,7 +31,7 @@ export const resumes = mysqlTable("resumes", {
   title: varchar("title", { length: 255 }).notNull(),
   templateId: varchar("templateId", { length: 50 }).notNull(),
   jobDescriptionId: varchar("jobDescriptionId", { length: 36 }),
-  content: text("content").notNull(), // Serialized JSON content of the resume
+  content: json("content").notNull(), // Native JSON content of the resume
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
@@ -46,7 +46,7 @@ export const jobDescriptions = mysqlTable("job_descriptions", {
   userId: int("userId"),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description").notNull(),
-  keywords: text("keywords").notNull(), // Serialized JSON array of keywords
+  keywords: json("keywords").notNull(), // Native JSON array of keywords
   isCustom: boolean("isCustom").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
@@ -65,7 +65,9 @@ export const subscriptions = mysqlTable("subscriptions", {
   referenceId: varchar("referenceId", { length: 255 }),
   startDate: timestamp("startDate").defaultNow().notNull(),
   endDate: timestamp("endDate"),
-});
+}, (table) => ({
+  userIdx: index("subscriptions_user_idx").on(table.userId),
+}));
 
 export type SubscriptionDb = typeof subscriptions.$inferSelect;
 export type InsertSubscriptionDb = typeof subscriptions.$inferInsert;
@@ -79,7 +81,9 @@ export const supportTickets = mysqlTable("support_tickets", {
   priority: varchar("priority", { length: 50 }).default("medium").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  userIdx: index("support_tickets_user_idx").on(table.userId),
+}));
 
 export type SupportTicketDb = typeof supportTickets.$inferSelect;
 export type InsertSupportTicketDb = typeof supportTickets.$inferInsert;
@@ -128,7 +132,9 @@ export const marketplaceItems = mysqlTable("marketplace_items", {
   downloads: int("downloads").default(0).notNull(),
   isPremium: boolean("isPremium").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  authorIdx: index("marketplace_author_idx").on(table.authorId),
+}));
 
 export type MarketplaceItemDb = typeof marketplaceItems.$inferSelect;
 export type InsertMarketplaceItemDb = typeof marketplaceItems.$inferInsert;
@@ -145,6 +151,7 @@ export const affiliateReferrals = mysqlTable("affiliate_referrals", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   referrerIdx: index("aff_ref_referrer_idx").on(table.referrerId),
+  emailStatusIdx: index("aff_ref_email_status_idx").on(table.email, table.status),
 }));
 
 export type AffiliateReferralDb = typeof affiliateReferrals.$inferSelect;
@@ -183,3 +190,161 @@ export const jobApplications = mysqlTable("job_applications", {
 
 export type JobApplicationDb = typeof jobApplications.$inferSelect;
 export type InsertJobApplicationDb = typeof jobApplications.$inferInsert;
+
+// ==========================================
+// GLOBAL COUNTRY MANAGEMENT SYSTEM TABLES
+// ==========================================
+
+export const countries = mysqlTable("countries", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  flag: varchar("flag", { length: 10 }).notNull(),
+  dialCode: varchar("dialCode", { length: 10 }).notNull(),
+  phoneFormat: varchar("phoneFormat", { length: 50 }).notNull(),
+  phoneRegex: varchar("phoneRegex", { length: 100 }).notNull(),
+  postalCodeLabel: varchar("postalCodeLabel", { length: 50 }).notNull(),
+  postalCodeFormat: varchar("postalCodeFormat", { length: 100 }).notNull(),
+  dateFormat: varchar("dateFormat", { length: 20 }).notNull(),
+  addressFormat: varchar("addressFormat", { length: 255 }).notNull(),
+  nationality: varchar("nationality", { length: 100 }).notNull(),
+  isPriority: boolean("isPriority").default(false).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CountryDb = typeof countries.$inferSelect;
+export type InsertCountryDb = typeof countries.$inferInsert;
+
+export const states = mysqlTable("states", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  countryIdx: index("states_country_idx").on(table.countryId),
+}));
+
+export type StateDb = typeof states.$inferSelect;
+export type InsertStateDb = typeof states.$inferInsert;
+
+export const districts = mysqlTable("districts", {
+  id: int("id").autoincrement().primaryKey(),
+  stateId: int("stateId").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  stateIdx: index("districts_state_idx").on(table.stateId),
+}));
+
+export type DistrictDb = typeof districts.$inferSelect;
+export type InsertDistrictDb = typeof districts.$inferInsert;
+
+export const cities = mysqlTable("cities", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull(),
+  stateId: int("stateId"),
+  districtId: int("districtId"),
+  name: varchar("name", { length: 100 }).notNull(),
+  postalCode: varchar("postalCode", { length: 20 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  countryIdx: index("cities_country_idx").on(table.countryId),
+  stateIdx: index("cities_state_idx").on(table.stateId),
+  districtIdx: index("cities_district_idx").on(table.districtId),
+}));
+
+export type CityDb = typeof cities.$inferSelect;
+export type InsertCityDb = typeof cities.$inferInsert;
+
+export const countrySettings = mysqlTable("country_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull().unique(),
+  dateFormat: varchar("dateFormat", { length: 20 }).notNull(),
+  addressFormat: varchar("addressFormat", { length: 255 }).notNull(),
+  resumeStyle: varchar("resumeStyle", { length: 100 }),
+  languagePreferences: json("languagePreferences").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  countryIdx: index("settings_country_idx").on(table.countryId),
+}));
+
+export type CountrySettingsDb = typeof countrySettings.$inferSelect;
+export type InsertCountrySettingsDb = typeof countrySettings.$inferInsert;
+
+export const countryPhoneCodes = mysqlTable("country_phone_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull().unique(),
+  dialCode: varchar("dialCode", { length: 10 }).notNull(),
+  validationRegex: varchar("validationRegex", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CountryPhoneCodeDb = typeof countryPhoneCodes.$inferSelect;
+export type InsertCountryPhoneCodeDb = typeof countryPhoneCodes.$inferInsert;
+
+export const countryAtsRules = mysqlTable("country_ats_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull(),
+  targetCountryId: int("targetCountryId").notNull(),
+  keywords: json("keywords").notNull(),
+  preferredFormatting: text("preferredFormatting").notNull(),
+  regionalHiringExpectations: text("regionalHiringExpectations").notNull(),
+  regionalTerminology: json("regionalTerminology").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  sourceTargetIdx: index("ats_source_target_idx").on(table.countryId, table.targetCountryId),
+}));
+
+export type CountryAtsRuleDb = typeof countryAtsRules.$inferSelect;
+export type InsertCountryAtsRuleDb = typeof countryAtsRules.$inferInsert;
+
+// ==========================================
+// OPTIONAL AUTHENTICATION & GUEST FLOW TABLES
+// ==========================================
+
+export const guestSessions = mysqlTable("guest_sessions", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  deviceUid: varchar("deviceUid", { length: 255 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  lastActiveAt: timestamp("lastActiveAt").defaultNow().notNull(),
+  convertedUserId: int("convertedUserId"),
+  convertedAt: timestamp("convertedAt"),
+});
+
+export type GuestSessionDb = typeof guestSessions.$inferSelect;
+export type InsertGuestSessionDb = typeof guestSessions.$inferInsert;
+
+export const resumeHistory = mysqlTable("resume_history", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  resumeId: varchar("resumeId", { length: 36 }).notNull(),
+  userId: int("userId").notNull(),
+  version: int("version").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: json("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  resumeIdx: index("history_resume_idx").on(table.resumeId),
+  userIdx: index("history_user_idx").on(table.userId),
+}));
+
+export type ResumeHistoryDb = typeof resumeHistory.$inferSelect;
+export type InsertResumeHistoryDb = typeof resumeHistory.$inferInsert;
+
+export const cloudBackups = mysqlTable("cloud_backups", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: int("userId").notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  content: json("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  userIdx: index("backups_user_idx").on(table.userId),
+}));
+
+export type CloudBackupDb = typeof cloudBackups.$inferSelect;
+export type InsertCloudBackupDb = typeof cloudBackups.$inferInsert;

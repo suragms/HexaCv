@@ -1,5 +1,6 @@
 import { invokeLLM } from "./_core/llm";
 import { Resume } from "@shared/types";
+import * as db from "./db";
 
 export interface BulletSuggestion {
   original: string;
@@ -50,12 +51,34 @@ export async function generateResumeSuggestions(
   const currentSkills = skillsSection?.content.skills || [];
   const currentExperiences = experienceSection?.content.experiences || [];
 
+  const countryCode = headerSection?.content.header?.countryCode;
+  const targetCountryCode = headerSection?.content.header?.targetCountryCode;
+
+  let regionalInstructions = "";
+  if (targetCountryCode) {
+    try {
+      const rules = await db.getCountryAtsRules(countryCode || "IN", targetCountryCode);
+      if (rules) {
+        regionalInstructions = `
+REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCode}):
+- Target country preferred formatting rules: ${rules.preferredFormatting}
+- Regional hiring expectations to incorporate: ${rules.regionalHiringExpectations}
+- Keywords specific to target country to weave in: ${Array.isArray(rules.keywords) ? rules.keywords.join(", ") : rules.keywords}
+- Regional Terminology conversions: Replace terms from source country with target country equivalents where appropriate. Map: ${JSON.stringify(rules.regionalTerminology)}
+`;
+      }
+    } catch (e) {
+      console.warn("Failed to load regional ATS rules:", e);
+    }
+  }
+
   // Build prompt for LLM
   const prompt = buildSuggestionPrompt(
     jobDescription,
     currentSummary,
     currentSkills,
-    currentExperiences
+    currentExperiences,
+    regionalInstructions
   );
 
   try {
@@ -234,14 +257,34 @@ export async function improveBulletPoints(
   role: string,
   company: string,
   currentBullets: string[],
-  jobDescription: string
+  jobDescription: string,
+  countryCode?: string,
+  targetCountryCode?: string
 ): Promise<string[]> {
+  let regionalInstructions = "";
+  if (targetCountryCode) {
+    try {
+      const rules = await db.getCountryAtsRules(countryCode || "IN", targetCountryCode);
+      if (rules) {
+        regionalInstructions = `
+REGIONAL OPTIMIZATION INSTRUCTIONS (${countryCode || "IN"} -> ${targetCountryCode}):
+- Target country formatting style details: ${rules.preferredFormatting}
+- Target country keywords: ${Array.isArray(rules.keywords) ? rules.keywords.join(", ") : rules.keywords}
+- Regional Terminology conversions (prefer target terms): ${JSON.stringify(rules.regionalTerminology)}
+`;
+      }
+    } catch (e) {
+      console.warn("Failed to load regional rules for bullet improvement:", e);
+    }
+  }
+
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
         content:
-          "You are an expert resume writer. Improve bullet points to be more impactful and aligned with job requirements. Focus on quantifiable results, action verbs, and relevant skills.",
+          "You are an expert resume writer. Improve bullet points to be more impactful and aligned with job requirements. Focus on quantifiable results, action verbs, and relevant skills." + 
+          (regionalInstructions ? ` Adhere strictly to these regional constraints:\n${regionalInstructions}` : ""),
       },
       {
         role: "user",
@@ -257,7 +300,8 @@ Provide improved versions of these bullet points that:
 2. Use strong action verbs
 3. Include quantifiable results where possible
 4. Align with the job description keywords
-5. Are concise and impactful
+5. Adhere to any regional terminology (e.g. use ZIP Code instead of PIN Code if target is USA)
+6. Are concise and impactful
 
 Return as a JSON array of strings.`,
       },
@@ -341,7 +385,8 @@ function buildSuggestionPrompt(
   jobDescription: string,
   currentSummary: string,
   currentSkills: any[],
-  currentExperiences: any[]
+  currentExperiences: any[],
+  regionalInstructions = ""
 ): string {
   const skillsText = currentSkills
     .map((sg: any) => `${sg.category}: ${sg.skills.join(", ")}`)
@@ -357,7 +402,7 @@ function buildSuggestionPrompt(
     .join("\n\n");
 
   return `Please analyze this resume and job description, then provide specific suggestions to improve the resume for this job.
-
+${regionalInstructions ? `\n${regionalInstructions}\n` : ""}
 CURRENT RESUME:
 Professional Summary: ${currentSummary || "(Not provided)"}
 
@@ -371,11 +416,11 @@ TARGET JOB DESCRIPTION:
 ${jobDescription}
 
 Please provide:
-1. An improved professional summary tailored to this job
-2. Suggested skills to add based on job requirements
+1. An improved professional summary tailored to this job (incorporating target country expectations/style)
+2. Suggested skills to add based on job requirements (and target country rules)
 3. Keywords from the job that match the resume
 4. Important keywords missing from the resume
-5. For each experience entry, suggest improvements to bullet points and new bullets to add
+5. For each experience entry, suggest improvements to bullet points and new bullets to add (optimized for the target country hiring expectations and terminology)
 6. Overall advice for tailoring this resume to the job
 
 Format your response as JSON with the structure provided.`;

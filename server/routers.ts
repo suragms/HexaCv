@@ -7,6 +7,8 @@ import * as db from "./db";
 import { generateResumeSuggestions, improveBulletPoints, calculateKeywordAlignment } from "./aiSuggestions";
 import { nanoid } from "nanoid";
 import { invokeLLM } from "./_core/llm";
+import { extractText, parseResumeWithLLM } from "./fileParser";
+import Stripe from "stripe";
 
 export const appRouter = router({
   system: systemRouter,
@@ -20,6 +22,11 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    convertGuest: protectedProcedure
+      .input(z.object({ guestSessionId: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        return db.convertGuestSession(input.guestSessionId, ctx.user.id);
+      }),
   }),
 
   // Resume Router
@@ -27,6 +34,17 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return db.listResumes(ctx.user.id);
     }),
+    
+    parse: protectedProcedure
+      .input(z.object({
+        filename: z.string(),
+        base64: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const fileBuffer = Buffer.from(input.base64, "base64");
+        const rawText = await extractText(fileBuffer, input.filename);
+        return parseResumeWithLLM(rawText);
+      }),
     
     get: protectedProcedure
       .input(z.object({ id: z.string() }))
@@ -77,7 +95,23 @@ export const appRouter = router({
         if (input.content !== undefined) updateData.content = input.content;
         if (input.jobDescriptionId !== undefined) updateData.jobDescriptionId = input.jobDescriptionId;
         
-        return db.updateResume(input.id, ctx.user.id, updateData);
+        const updated = await db.updateResume(input.id, ctx.user.id, updateData);
+        if (updated && input.content !== undefined) {
+          await db.saveResumeHistory(
+            ctx.user.id,
+            updated.id,
+            updated.title,
+            updated.templateId,
+            updated.content
+          );
+        }
+        return updated;
+      }),
+      
+    getHistory: protectedProcedure
+      .input(z.object({ resumeId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        return db.getResumeHistory(input.resumeId, ctx.user.id);
       }),
       
     delete: protectedProcedure
@@ -131,7 +165,7 @@ export const appRouter = router({
 
   // AI Integration Router
   ai: router({
-    generateFullResume: protectedProcedure
+    generateFullResume: publicProcedure
       .input(z.object({
         jobTitle: z.string(),
         experienceDetails: z.string(),
@@ -359,7 +393,7 @@ export const appRouter = router({
         }
       }),
 
-    generateSuggestions: protectedProcedure
+    generateSuggestions: publicProcedure
       .input(z.object({
         resumeId: z.string().optional(),
         resumeContent: z.string().optional(), // Fallback raw JSON string
@@ -369,7 +403,7 @@ export const appRouter = router({
         let resumeObj: any = null;
         if (input.resumeId) {
           const res = await db.getResume(input.resumeId);
-          if (res && res.userId === ctx.user.id) {
+          if (res && ctx.user && res.userId === ctx.user.id) {
             resumeObj = JSON.parse(res.content);
           }
         }
@@ -382,18 +416,27 @@ export const appRouter = router({
         return generateResumeSuggestions(resumeObj, input.jobDescription);
       }),
 
-    improveBullets: protectedProcedure
+    improveBullets: publicProcedure
       .input(z.object({
         role: z.string(),
         company: z.string(),
         currentBullets: z.array(z.string()),
         jobDescription: z.string(),
+        countryCode: z.string().optional(),
+        targetCountryCode: z.string().optional()
       }))
       .mutation(async ({ input }) => {
-        return improveBulletPoints(input.role, input.company, input.currentBullets, input.jobDescription);
+        return improveBulletPoints(
+          input.role,
+          input.company,
+          input.currentBullets,
+          input.jobDescription,
+          input.countryCode,
+          input.targetCountryCode
+        );
       }),
 
-    calculateScore: protectedProcedure
+    calculateScore: publicProcedure
       .input(z.object({
         resumeContent: z.string(),
         jobDescription: z.string(),
@@ -439,17 +482,32 @@ export const appRouter = router({
         secondaryColor: z.string().optional(),
         customDomain: z.string().optional()
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const members = await db.getOrganizationMembers(input.id);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to update organization");
+        }
         return db.updateOrganization(input.id, input);
       }),
     members: protectedProcedure
       .input(z.object({ orgId: z.string() }))
-      .query(async ({ input }) => {
-        return db.getOrganizationMembers(input.orgId);
+      .query(async ({ input, ctx }) => {
+        const members = await db.getOrganizationMembers(input.orgId);
+        const isMember = members.some(m => m.userId === ctx.user.id);
+        if (!isMember) {
+          throw new Error("Unauthorized to view members");
+        }
+        return members;
       }),
     invite: protectedProcedure
       .input(z.object({ orgId: z.string(), email: z.string(), role: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const members = await db.getOrganizationMembers(input.orgId);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to invite members");
+        }
         const invitee = db.mockDb.users.find(u => u.email === input.email);
         if (!invitee) {
           throw new Error("No HexaCv user found with that email yet. Have them sign in once first!");
@@ -463,7 +521,12 @@ export const appRouter = router({
       }),
     removeMember: protectedProcedure
       .input(z.object({ orgId: z.string(), memberId: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const members = await db.getOrganizationMembers(input.orgId);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to remove members");
+        }
         return db.removeOrganizationMember(input.orgId, input.memberId);
       })
   }),
@@ -501,9 +564,9 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return db.incrementDownloads(input.id);
       }),
-    rate: publicProcedure
+    rate: protectedProcedure
       .input(z.object({ id: z.string(), rating: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         return db.rateMarketplaceItem(input.id, input.rating);
       })
   }),
@@ -529,7 +592,12 @@ export const appRouter = router({
         description: z.string(),
         requirements: z.string()
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const members = await db.getOrganizationMembers(input.orgId);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to create job for this organization");
+        }
         return db.createRecruiterJob({
           id: nanoid(),
           organizationId: input.orgId,
@@ -545,7 +613,14 @@ export const appRouter = router({
       }),
     listApplications: protectedProcedure
       .input(z.object({ jobId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const job = await db.getRecruiterJob(input.jobId);
+        if (!job) throw new Error("Recruiter job vacancy not found");
+        const members = await db.getOrganizationMembers(job.organizationId);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to view applications for this vacancy");
+        }
         return db.listJobApplications(input.jobId);
       }),
     submitApplication: publicProcedure
@@ -585,7 +660,16 @@ export const appRouter = router({
       }),
     updateStatus: protectedProcedure
       .input(z.object({ id: z.string(), status: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const app = await db.getJobApplication(input.id);
+        if (!app) throw new Error("Application not found");
+        const job = await db.getRecruiterJob(app.jobId);
+        if (!job) throw new Error("Recruiter job vacancy not found");
+        const members = await db.getOrganizationMembers(job.organizationId);
+        const caller = members.find(m => m.userId === ctx.user.id);
+        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+          throw new Error("Unauthorized to modify application status");
+        }
         return db.updateApplicationStatus(input.id, input.status);
       })
   }),
@@ -595,6 +679,47 @@ export const appRouter = router({
     getSubscription: protectedProcedure.query(async ({ ctx }) => {
       return db.getSubscription(ctx.user.id);
     }),
+    
+    createCheckoutSession: protectedProcedure
+      .input(z.object({ tier: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (process.env.STRIPE_SECRET_KEY) {
+          try {
+            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" as any });
+            const origin = ctx.req.headers.origin || "http://localhost:3000";
+            const session = await stripe.checkout.sessions.create({
+              payment_method_types: ["card"],
+              line_items: [{
+                price_data: {
+                  currency: "usd",
+                  product_data: {
+                    name: `HexaCv ${input.tier.toUpperCase()} Plan`,
+                    description: `Access to HexaCv ${input.tier} features`,
+                  },
+                  unit_amount: input.tier === "pro" ? 1900 : input.tier === "enterprise" ? 9900 : 0,
+                  recurring: { interval: "month" },
+                },
+                quantity: 1,
+              }],
+              mode: "subscription",
+              success_url: `${origin}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}&status=success`,
+              cancel_url: `${origin}/dashboard/billing?status=cancel`,
+              metadata: {
+                userId: ctx.user.id.toString(),
+                tier: input.tier,
+              }
+            });
+            return { url: session.url };
+          } catch (e: any) {
+            console.error("Stripe session creation error:", e);
+            throw new Error(`Stripe session creation failed: ${e.message}`);
+          }
+        } else {
+          // Fall back to simulated checkout simulation page
+          return { url: `/dashboard/billing/checkout?tier=${input.tier}` };
+        }
+      }),
+
     upgradePlan: protectedProcedure
       .input(z.object({ tier: z.string() }))
       .mutation(async ({ input, ctx }) => {
@@ -617,6 +742,28 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         return db.createSupportTicket(ctx.user.id, input.title, input.description, input.priority);
       })
+  }),
+
+  backup: router({
+    save: protectedProcedure
+      .input(z.object({
+        type: z.string(),
+        name: z.string(),
+        content: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return db.saveCloudBackup(ctx.user.id, input.type, input.name, input.content);
+      }),
+    list: protectedProcedure
+      .input(z.object({ type: z.string() }))
+      .query(async ({ input, ctx }) => {
+        return db.listCloudBackups(ctx.user.id, input.type);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        return db.deleteCloudBackup(input.id, ctx.user.id);
+      }),
   }),
 
   // SaaS Admin & CRM Router

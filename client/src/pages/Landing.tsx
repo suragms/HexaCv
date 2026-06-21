@@ -10,9 +10,11 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import { useAuth } from '@/_core/hooks/useAuth';
 
 export default function Landing() {
   const { installPrompt, isOnline, installApp } = usePWA();
+  const { isAuthenticated } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -45,11 +47,31 @@ export default function Landing() {
                 Install App
               </Button>
             )}
-            <Link href="/builder">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                Get Started
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <Link href="/builder">
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                  Go to Dashboard
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" size="sm">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/register">
+                  <Button variant="outline" size="sm">
+                    Sign Up
+                  </Button>
+                </Link>
+                <Link href="/builder">
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                    Build Resume Now
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -68,18 +90,20 @@ export default function Landing() {
               Upload your existing resume or build from scratch. Tailor your CV to any job description with AI-powered alignment. Export a polished PDF instantly.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/builder?mode=upload">
+              <Link href="/builder">
                 <Button size="lg" className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto gap-2">
-                  Upload Resume
+                  Build Resume Now
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <Link href="/builder?mode=scratch">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
-                  Build from Scratch
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+              {!isAuthenticated && (
+                <Link href="/login">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
+                    Sign In / Create Account
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              )}
             </div>
             <p className="text-sm text-slate-500 mt-6">
               {isOnline ? (
