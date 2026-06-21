@@ -71,49 +71,79 @@ pnpm run start
 hexacv-app/
 ├── client/                          # Frontend React application
 │   ├── src/
-│   │   ├── pages/                  # Page components
-│   │   │   ├── Landing.tsx         # Landing page (with Guest/Register CTAs)
-│   │   │   ├── ResumeBuilder.tsx   # Resume builder interface (with Guest warning banner)
-│   │   │   ├── Login.tsx           # Glassmorphic OAuth and local bypass login
-│   │   │   └── Documentation.tsx   # In-app documentation
+│   │   ├── _core/                   # Core framework utilities
+│   │   │   └── hooks/               # Core state and data sync hooks
+│   │   │       ├── useAuth.ts       # Authentication state hook
+│   │   │       └── useResumeStorage.ts # Local Storage & Cloud DB sync coordinator
+│   │   ├── pages/                  # Main page components
+│   │   │   ├── Landing.tsx         # Product marketing & CTAs
+│   │   │   ├── Home.tsx            # Home landing redirection
+│   │   │   ├── Login.tsx           # OAuth login & simulated bypass page
+│   │   │   ├── Register.tsx        # Registration and user setup page
+│   │   │   ├── Dashboard.tsx       # Cloud resume list and actions
+│   │   │   ├── ResumeBuilder.tsx   # Builder container orchestration
+│   │   │   ├── Documentation.tsx   # Developer and end-user guide
+│   │   │   └── ComponentShowcase.tsx # Live style guide and sandbox
 │   │   ├── components/             # Reusable UI components
-│   │   │   ├── ResumeUploader.tsx  # Document drag & drop uploader
-│   │   │   ├── ResumeScratchBuilder.tsx
-│   │   │   ├── ResumeEditor.tsx    # Editor (with AI Summary Rewriter)
-│   │   │   ├── ResumePreview.tsx   # Print-safe preview using Inter font stack
-│   │   │   └── AdminCRM.tsx        # Super Admin CRM with guest conversion statistics
-│   │   ├── hooks/                  # Custom React hooks
-│   │   │   └── useResumeStorage.ts # Unified storage coordinator (Local vs Cloud)
-│   │   ├── lib/                    # Utility functions
-│   │   │   ├── templates.ts        # Template definitions
-│   │   │   ├── jobDescriptions.ts  # Job description presets
-│   │   │   ├── pdfExport.ts        # PDF generation utilities
-│   │   │   └── trpc.ts             # TRPC client configuration
-│   │   ├── App.tsx                 # Main app component and router
+│   │   │   ├── ResumeUploader.tsx  # Document upload parser hook UI
+│   │   │   ├── ResumeScratchBuilder.tsx # Multi-step builder wizard
+│   │   │   ├── ResumeEditor.tsx    # Live edit form (with summary AI rewriting)
+│   │   │   ├── ResumePreview.tsx   # PDF templates preview with Inter typography
+│   │   │   ├── AdminCRM.tsx        # Admin CRM stats & conversion tracking
+│   │   │   ├── CountryLocationFields.tsx # Country-dependent address forms
+│   │   │   ├── AIChatBox.tsx       # AI interactive resume feedback chatbot
+│   │   │   ├── ATSScanner.tsx      # ATS alignment keyword checker UI
+│   │   │   ├── RecruiterPortal.tsx # Job postings & candidate scoring dashboard
+│   │   │   ├── OrganizationPortal.tsx # Multi-tenant team configurations
+│   │   │   └── Marketplace.tsx     # Custom templates marketplace catalog
+│   │   ├── hooks/                  # Client-side general hooks
+│   │   │   ├── usePWA.ts           # PWA install prompt & offline listener
+│   │   │   └── useComposition.ts   # Keyboard IME composition tracking
+│   │   ├── contexts/               # React Context Providers
+│   │   │   └── ThemeContext.tsx    # Theme manager provider
+│   │   ├── lib/                    # Library integrations
+│   │   │   ├── countryData.ts      # Country-specific dial codes, formats & schemas
+│   │   │   ├── jobDescriptions.ts  # ATS baseline presets for resume matching
+│   │   │   ├── pdfExport.ts        # jsPDF export layout compiler
+│   │   │   ├── resumeParser.ts     # Client side extraction helpers
+│   │   │   ├── templates.ts        # Style definitions for classic, executive, sidebar, tech
+│   │   │   └── trpc.ts             # TRPC client wrapper hooks setup
+│   │   ├── App.tsx                 # Client router (wouter) & provider setup
 │   │   └── main.tsx                # Entry point
 │   ├── public/                      # Static assets
-│   │   ├── manifest.json           # PWA manifest
-│   │   ├── service-worker.js       # Service worker
-│   │   └── favicon.ico             # App icon
-│   └── index.html                  # HTML template
+│   │   ├── manifest.json           # PWA installation config
+│   │   ├── service-worker.js       # Offline asset caching worker
+│   │   └── favicon.ico             # Brand icon
+│   └── index.html                  # HTML shell
 ├── server/                          # Backend Express application
-│   ├── routers.ts                  # tRPC procedure definitions (guest, auth, AI routers)
-│   ├── db.ts                       # Database queries & conversion tracking
-│   ├── fileParser.ts               # Raw text cleaning + LLM parsing & post-deduplication
-│   ├── aiSuggestions.ts            # LLM prompts for bullet & summary rewriting
-│   ├── storage.ts                  # S3 storage helpers
-│   └── _core/                      # Framework core (cookies, contexts, oauth)
-├── drizzle/                         # Database schema and migrations
-│   ├── schema.ts                   # Table definitions (guest_sessions, cloud_backups, resumes)
-│   └── migrations/                 # SQL migration files
-├── shared/                          # Shared types and constants
-│   ├── types.ts                    # TypeScript type definitions
-│   └── const.ts                    # Shared constants
-├── BUILD_AND_DEPLOYMENT.md         # Build and deployment guide
-├── DESIGN_AND_PROMPTS.md           # Design system and TTS prompts
-├── USER_GUIDE.md                   # End-user guide
-├── ARCHITECTURE.md                 # Architecture documentation
-└── README.md                        # This file
+│   ├── _core/                      # Server engine & libraries
+│   │   ├── context.ts              # Session and tracking header contexts
+│   │   ├── cookies.ts              # OAuth session cookie controls
+│   │   ├── env.ts                  # Backend environment guards
+│   │   ├── llm.ts                  # LLM generic invoker client
+│   │   ├── oauth.ts                # Manus OAuth endpoint routes
+│   │   ├── sdk.ts                  # Session verification middleware
+│   │   └── trpc.ts                 # TRPC instance & permissions guards
+│   ├── middleware/                 # Express middleware layers
+│   │   └── security.ts             # CSRF/CORS protections
+│   ├── routers.ts                  # Main TRPC endpoints mapping
+│   ├── db.ts                       # Database CRUD operations, conversion metrics & backups
+│   ├── fileParser.ts               # Text cleaning + strict LLM structured parsing
+│   ├── aiSuggestions.ts            # LLM prompts for summaries & bullets suggestions
+│   ├── storage.ts                  # Cloud file assets manager (S3 SDK)
+│   ├── countryRoutes.ts            # Country configurations & regional rules endpoint
+│   └── stripeWebhook.ts            # Stripe webhook hook
+├── drizzle/                         # Database schema & migration tools
+│   ├── schema.ts                   # Tables definitions
+│   └── migrations/                 # Applied Drizzle migrations
+├── shared/                          # Cross-boundary parameters
+│   ├── types.ts                    # Shared types
+│   └── const.ts                    # Global shared consts
+├── BUILD_AND_DEPLOYMENT.md         # Deployment logs
+├── DESIGN_AND_PROMPTS.md           # Visual design values & TTS prompts
+├── USER_GUIDE.md                   # End-user tutorials
+├── ARCHITECTURE.md                 # Design decisions and schema charts
+└── README.md                        # This documentation file
 ```
 
 ---
