@@ -2,25 +2,28 @@
 
 **Prepared by:** Surag & Anandu Krishna | HexaStack Solutions  
 **Website:** https://www.hexastacksolutions.com/  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **License:** © 2026 HexaStack Solutions
 
 ---
 
 ## Overview
 
-**HexaCv** is a full-featured, Progressive Web App (PWA) resume builder that empowers users to create, customize, and export professional resumes with AI-powered job description alignment. Built with modern web technologies, HexaCv provides a seamless experience across mobile, tablet, and desktop devices.
+**HexaCv** is a full-featured, Progressive Web App (PWA) resume builder that empowers users to create, customize, and export professional resumes with AI-powered job description alignment. Built with modern web technologies, HexaCv provides a seamless experience across mobile, tablet, and desktop devices. 
+
+---
 
 ### Key Features
 
-- **Resume Upload & Parsing:** Support for PDF, DOCX, and TXT formats with client-side text extraction
-- **Build from Scratch:** Guided multi-step form for creating resumes from the ground up
-- **Job Description Targeting:** Preset roles and custom job description input for resume alignment
-- **Multiple Templates:** Four professional designs (Classic ATS Blue, Minimal Executive, Modern Sidebar Lite, Technical Compact)
-- **Real-time Preview:** Live resume preview that updates instantly as you edit
-- **PDF Export:** One-click download of polished, print-ready resumes
-- **PWA Support:** Installable app with offline functionality and service worker
-- **Complete Documentation:** In-app guides with UI/UX and TTS prompts
+- **Optional Authentication & Guest Mode:** Open the app and start building instantly as a Guest. Guest data persists in `LocalStorage` with a limit of 3 resumes.
+- **Auto Cloud Migration:** Upon registration or login, guest resumes, cover letters, and reports are automatically migrated to the cloud database.
+- **Robust Resume Upload & Parsing:** Support for PDF, DOCX, and TXT with raw text cleaning (strips consecutive duplicates, page numbers, and repeating headers/footers) and strict LLM parsing schemas.
+- **Zero AI-Fabrication Guarantee:** Structured parser enforces "Genuine Content Only", mapping roles, company names, and dates verbatim with no hallucinated achievements.
+- **Candidate Job Title Auto-Detection:** Automatically infers the candidate's core professional target role based on the uploaded document's content.
+- **AI Summary Rewriting:** Tailor your professional summary instantly to any target job description and target country ATS standards with a dedicated "Rewrite with AI" interface.
+- **Print-Safe Preview & Typography:** Features Google Fonts `Inter` styling and strict disc bullet rendering that overrides standard Tailwind CSS reset rules.
+- **Super Admin CRM & Analytics:** Track guest sessions, conversions, cloud backup statistics, and database analytics through the CRM panel.
+- **PWA Support:** Installable app with offline capabilities and service workers.
 
 ---
 
@@ -41,11 +44,11 @@ cd /home/ubuntu/hexacv-app
 # Install dependencies
 pnpm install
 
-# Generate database schema
-pnpm drizzle-kit generate
+# Generate database schema & apply migrations
+pnpm run db:push
 
 # Start development server
-pnpm dev
+pnpm run dev
 ```
 
 The app will be available at `http://localhost:3000`
@@ -54,10 +57,10 @@ The app will be available at `http://localhost:3000`
 
 ```bash
 # Build frontend and backend
-pnpm build
+pnpm run build
 
 # Start production server
-pnpm start
+pnpm run start
 ```
 
 ---
@@ -69,22 +72,24 @@ hexacv-app/
 ├── client/                          # Frontend React application
 │   ├── src/
 │   │   ├── pages/                  # Page components
-│   │   │   ├── Landing.tsx         # Landing page
-│   │   │   ├── ResumeBuilder.tsx   # Resume builder interface
+│   │   │   ├── Landing.tsx         # Landing page (with Guest/Register CTAs)
+│   │   │   ├── ResumeBuilder.tsx   # Resume builder interface (with Guest warning banner)
+│   │   │   ├── Login.tsx           # Glassmorphic OAuth and local bypass login
 │   │   │   └── Documentation.tsx   # In-app documentation
 │   │   ├── components/             # Reusable UI components
-│   │   │   ├── ResumeUploader.tsx
+│   │   │   ├── ResumeUploader.tsx  # Document drag & drop uploader
 │   │   │   ├── ResumeScratchBuilder.tsx
-│   │   │   ├── ResumeEditor.tsx
-│   │   │   └── ResumePreview.tsx
+│   │   │   ├── ResumeEditor.tsx    # Editor (with AI Summary Rewriter)
+│   │   │   ├── ResumePreview.tsx   # Print-safe preview using Inter font stack
+│   │   │   └── AdminCRM.tsx        # Super Admin CRM with guest conversion statistics
 │   │   ├── hooks/                  # Custom React hooks
-│   │   │   └── usePWA.ts          # PWA functionality
+│   │   │   └── useResumeStorage.ts # Unified storage coordinator (Local vs Cloud)
 │   │   ├── lib/                    # Utility functions
 │   │   │   ├── templates.ts        # Template definitions
 │   │   │   ├── jobDescriptions.ts  # Job description presets
-│   │   │   ├── resumeParser.ts     # Resume parsing logic
-│   │   │   └── pdfExport.ts        # PDF generation utilities
-│   │   ├── App.tsx                 # Main app component
+│   │   │   ├── pdfExport.ts        # PDF generation utilities
+│   │   │   └── trpc.ts             # TRPC client configuration
+│   │   ├── App.tsx                 # Main app component and router
 │   │   └── main.tsx                # Entry point
 │   ├── public/                      # Static assets
 │   │   ├── manifest.json           # PWA manifest
@@ -92,12 +97,14 @@ hexacv-app/
 │   │   └── favicon.ico             # App icon
 │   └── index.html                  # HTML template
 ├── server/                          # Backend Express application
-│   ├── routers.ts                  # tRPC procedure definitions
-│   ├── db.ts                       # Database queries
+│   ├── routers.ts                  # tRPC procedure definitions (guest, auth, AI routers)
+│   ├── db.ts                       # Database queries & conversion tracking
+│   ├── fileParser.ts               # Raw text cleaning + LLM parsing & post-deduplication
+│   ├── aiSuggestions.ts            # LLM prompts for bullet & summary rewriting
 │   ├── storage.ts                  # S3 storage helpers
-│   └── _core/                      # Framework core
+│   └── _core/                      # Framework core (cookies, contexts, oauth)
 ├── drizzle/                         # Database schema and migrations
-│   ├── schema.ts                   # Table definitions
+│   ├── schema.ts                   # Table definitions (guest_sessions, cloud_backups, resumes)
 │   └── migrations/                 # SQL migration files
 ├── shared/                          # Shared types and constants
 │   ├── types.ts                    # TypeScript type definitions
@@ -118,8 +125,9 @@ hexacv-app/
 | Frontend Framework | React 19 + TypeScript |
 | Styling | Tailwind CSS 4 |
 | Backend | Express.js + tRPC 11 |
+| Database ORM | Drizzle ORM |
 | Database | MySQL/TiDB |
-| Authentication | Manus OAuth |
+| Authentication | Manus OAuth + Optional Guest session tracking |
 | PDF Generation | jsPDF + html2canvas |
 | PWA | Service Worker + Web App Manifest |
 | Testing | Vitest |
@@ -129,181 +137,29 @@ hexacv-app/
 
 ## Features in Detail
 
-### 1. Landing Page
+### 1. Guest Experience & Local Storage
+- **Anonymous Entry:** Users can start building resumes immediately.
+- **Local Persistence:** Resumes and reports saved to browser's `LocalStorage` (up to 3 resume files).
+- **Auto Cloud Migration:** As soon as a guest logs in, their drafts are uploaded to the MySQL database and local storage is cleared.
 
-The landing page introduces HexaCv with:
+### 2. Strict PDF/DOCX Parser & Sanitizer
+- **Raw Cleaning:** Filters out page numbers ("Page 1 of 5") and duplicate lines (e.g. repeated page headers or footers in double-column layouts).
+- **Structured Schema:** Converts PDF text layers to JSON using structured schemas.
+- **Genuine Check:** Rejects fabricated text. Dates and company names are mapped verbatim.
+- **Post-LLM Clean:** Server-side deduplication merges duplicate skill categories, filters repetitive bullet points, and generates unique IDs.
 
-- **Hero Section:** Compelling headline, value proposition, and CTAs
-- **Features Overview:** Six key features with icons and descriptions
-- **Template Showcase:** Preview of all four professional templates
-- **Call-to-Action:** Prominent button encouraging users to get started
-- **Footer:** HexaStack Solutions branding and links
+### 3. AI Professional Summary Rewrite
+- **Tailored Summaries:** A "Rewrite with AI" button is integrated into the summary editor tab.
+- **ATS Alignment:** Rewrites are tailored to target job titles, target descriptions, and regional formatting standards.
+- **Concise Layout:** Restricts summaries to 2-4 sentences with strong action verbs.
 
-### 2. Resume Upload & Parsing
+### 4. Print-Ready Template Preview
+- **Disc Bullets Rendering:** Restores custom `list-style-type: disc` markers that Tailwind CSS's preflight resets would otherwise remove.
+- **Typography:** Enforces a clean, standard, print-safe Google Font `Inter` stack on the PDF template layouts.
 
-Users can upload existing resumes in multiple formats:
-
-- **Supported Formats:** PDF, DOCX, TXT
-- **Client-side Processing:** All parsing happens on the user's device
-- **Automatic Extraction:** Sections automatically identified and organized
-- **Data Normalization:** Parsed content cleaned and validated
-
-### 3. Resume Builder from Scratch
-
-Guided multi-step form for creating resumes:
-
-- **Step 1:** Contact information (name, email, phone, location)
-- **Step 2:** Professional summary (optional)
-- **Step 3:** Skills (categorized by type)
-- **Step 4:** Work experience (company, role, dates, description)
-- **Step 5:** Projects (name, description, technologies)
-- **Step 6:** Education (institution, degree, field, graduation date)
-- **Step 7:** Certifications (name, issuer, date)
-- **Step 8:** Review and confirmation
-
-### 4. Resume Editor
-
-Professional editor interface with:
-
-- **Left Sidebar:** Template and job description selectors
-- **Center Panel:** Edit resume content section by section
-- **Right Panel:** Live preview of resume
-- **Real-time Updates:** Preview updates instantly as user types
-- **Section Management:** Toggle visibility, reorder sections
-
-### 5. Template System
-
-Four professional templates:
-
-| Template | Design | Best For |
-|----------|--------|----------|
-| Classic ATS Blue | Traditional single-column | Corporate roles |
-| Minimal Executive | Clean, modern aesthetic | Senior positions |
-| Modern Sidebar Lite | Two-column with sidebar | Creative professionals |
-| Technical Compact | Dense, tech-focused | Developers, engineers |
-
-### 6. Job Description Targeting
-
-Align resume to specific job requirements:
-
-- **Preset Jobs:** 8 common roles (Full-Stack Developer, Frontend Engineer, etc.)
-- **Custom Input:** Paste any job description
-- **Keyword Extraction:** Automatic keyword identification
-- **Match Score:** See how well your resume aligns with the job
-- **Suggestions:** Get recommendations for content improvements
-
-### 7. PDF Export
-
-Export resume as professional PDF:
-
-- **One-Click Download:** Simple export process
-- **Template-Specific Styling:** PDF preserves template design
-- **Print-Friendly:** Optimized for both screen and print
-- **Multiple Downloads:** Export as many times as needed
-
-### 8. PWA Support
-
-Progressive Web App features:
-
-- **Installable:** Add to home screen on mobile or install on desktop
-- **Offline Support:** Works without internet connection
-- **Service Worker:** Caches app shell and assets
-- **Fast Loading:** Instant app startup
-- **No Account Required:** Use without registration
-
----
-
-## Documentation
-
-### For Developers
-
-- **BUILD_AND_DEPLOYMENT.md:** Complete build instructions, deployment guide, and environment setup
-- **ARCHITECTURE.md:** System architecture, data models, and design decisions
-- **DESIGN_AND_PROMPTS.md:** Design system, UI/UX prompts, and TTS narration prompts
-
-### For End Users
-
-- **USER_GUIDE.md:** Step-by-step guide to using HexaCv, including tips and best practices
-- **In-app Documentation:** Accessible from the app's documentation page
-
-### For Designers
-
-- **DESIGN_AND_PROMPTS.md:** Comprehensive design guidelines, color palette, typography, and responsive design patterns
-
----
-
-## TTS Narration Prompts
-
-All TTS prompts follow the **tts-prompter format** for Stitch AI integration:
-
-```
-[Style Instructions]: [Spoken Text]
-```
-
-Examples:
-
-**Landing Page Hero:**
-```
-Speak in English with a professional, confident, and welcoming tone: Build your perfect resume in minutes. Upload your existing resume or build from scratch. Tailor your CV to any job description with AI-powered alignment. Export a polished PDF instantly. HexaCv is powered by HexaStack Solutions.
-```
-
-**Resume Editor:**
-```
-Speak in English with a calm and instructional tone: You're now in the resume editor. On the left, you'll see all your resume sections. Click any section to edit its content. Your changes appear instantly in the live preview on the right. You can reorder sections by dragging, toggle section visibility, and edit bullets inline. When you're satisfied, click Export PDF to download your resume.
-```
-
-See **DESIGN_AND_PROMPTS.md** for all TTS prompts.
-
----
-
-## Deployment
-
-### Manus Platform
-
-HexaCv is optimized for deployment on the Manus platform:
-
-1. **Create Checkpoint:** Save project state in Manus UI
-2. **Configure Secrets:** Set environment variables in Manus Settings
-3. **Deploy:** Click "Publish" button in Management UI
-4. **Verify:** Test all features in production
-
-### Environment Variables
-
-Required environment variables (automatically injected by Manus):
-
-```bash
-DATABASE_URL=mysql://user:password@host/database
-JWT_SECRET=your-secret-key
-VITE_APP_ID=your-app-id
-OAUTH_SERVER_URL=https://api.manus.im
-VITE_OAUTH_PORTAL_URL=https://manus.im/login
-OWNER_OPEN_ID=owner-id
-OWNER_NAME=Owner Name
-BUILT_IN_FORGE_API_URL=https://api.manus.im/forge
-BUILT_IN_FORGE_API_KEY=your-api-key
-VITE_FRONTEND_FORGE_API_URL=https://api.manus.im/forge
-VITE_FRONTEND_FORGE_API_KEY=your-frontend-key
-```
-
----
-
-## Branding
-
-### HexaStack Solutions Identity
-
-- **Company:** HexaStack Solutions
-- **Founders:** Surag & Anandu Krishna
-- **Website:** https://www.hexastacksolutions.com/
-- **Product:** HexaCv - AI Resume Builder
-
-### Brand Colors
-
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Primary Blue | #1e40af | Primary CTA, headers |
-| Dark Slate | #0f172a | Text, dark backgrounds |
-| Light Slate | #f8fafc | Light backgrounds |
-| Success Green | #16a34a | Success states |
+### 5. Admin CRM & Dashboard Analytics
+- **Conversion Tracking:** Measures active guest counts, registered counts, and conversion percentages.
+- **Cloud Backup:** Shows active backups and backup history metrics.
 
 ---
 
@@ -322,98 +178,35 @@ pnpm test --watch
 pnpm test --coverage
 ```
 
-### Type Checking
+### Type Checking & Formatting
 
 ```bash
 # Check TypeScript compilation
-pnpm check
+pnpm run check
 
 # Format code
-pnpm format
+pnpm run format
 ```
 
 ---
 
-## Performance
+## Changelog
 
-HexaCv is optimized for performance:
+### Version 1.1.0 (June 2026)
+- **Guest Mode Persistence:** Added `LocalStorage` guest support with a 3-resume draft limit.
+- **Automatic Cloud Migration:** Unified hook to sync local data to the database upon user login.
+- **Sanitized PDF Parser:** Prevented AI hallucinations, auto-detected target roles, and eliminated duplicated text.
+- **AI Summary Rewriting:** Added a 1-click summary optimizer inside the editor.
+- **Styling Upgrade:** Enforced Inter fonts and bullet disc styling to prevent layout resets.
+- **CRM conversion rates:** Active guest session analytics implemented in the super admin panel.
 
-- **Fast Initial Load:** Optimized bundle size and lazy loading
-- **Instant Preview:** Real-time updates without lag
-- **Efficient Parsing:** Client-side parsing with minimal overhead
-- **PWA Caching:** Service worker caches assets for instant loading
-- **Responsive Design:** Optimized for all device sizes
-
----
-
-## Accessibility
-
-HexaCv meets WCAG 2.1 AA accessibility standards:
-
-- **Keyboard Navigation:** All features accessible via keyboard
-- **Screen Reader Support:** Compatible with screen readers
-- **Color Contrast:** Readable on all display types
-- **Focus Indicators:** Clear focus rings on interactive elements
-- **Semantic HTML:** Proper heading hierarchy and labels
-
----
-
-## Privacy & Security
-
-- **Client-Side Processing:** All data processing happens on the user's device
-- **No Server Upload:** User files never sent to servers
-- **Local Storage:** Resume data stored locally on device
-- **No Tracking:** No analytics or tracking cookies
-- **Data Control:** Users can delete data anytime
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue: Resume didn't parse correctly**
-- Try uploading a different format
-- Ensure resume follows standard format
-- Try building from scratch instead
-
-**Issue: PDF export isn't working**
-- Try a different browser
-- Check download settings
-- Ensure pop-ups aren't blocked
-
-**Issue: App running slowly**
-- Close other browser tabs
-- Clear browser cache
-- Try a different browser
-
-See **USER_GUIDE.md** for more troubleshooting tips.
-
----
-
-## Support
-
-For questions or issues:
-
-- **Website:** https://www.hexastacksolutions.com/
-- **In-app Documentation:** See documentation page in app
-- **User Guide:** See USER_GUIDE.md
-
----
-
-## Contributing
-
-HexaCv is developed and maintained by Surag & Anandu Krishna at HexaStack Solutions.
-
-For contributions or feature requests, please visit https://www.hexastacksolutions.com/
-
----
-
-## License
-
-All rights reserved. © 2026 HexaStack Solutions.
-
-HexaCv is provided as-is for personal and professional use.
+### Version 1.0.0 (Initial Release)
+- Landing page with HexaStack branding
+- Basic resume upload and parsing
+- Multi-step builder from scratch
+- Four professional templates
+- Preset job descriptions and keyword mapping
+- PDF exports
 
 ---
 
@@ -425,45 +218,4 @@ HexaCv is provided as-is for personal and professional use.
 
 ---
 
-## Changelog
-
-### Version 1.0.0 (June 2026)
-
-**Initial Release**
-- Landing page with HexaStack branding
-- Resume upload and parsing
-- Resume builder from scratch
-- Resume editor with live preview
-- Four professional templates
-- Job description targeting
-- PDF export
-- PWA support
-- Complete documentation
-- User guide
-
----
-
-## Getting Started
-
-1. **Visit HexaCv:** Open the app in your browser
-2. **Choose Your Path:** Upload existing resume or build from scratch
-3. **Edit and Customize:** Use the editor to refine your resume
-4. **Select Template:** Choose from four professional designs
-5. **Target Job:** Select or enter a job description
-6. **Export:** Download your resume as PDF
-7. **Submit:** Send your resume to employers
-
----
-
-## Next Steps
-
-- **Install as App:** Add HexaCv to your home screen for offline access
-- **Build Multiple Resumes:** Create different versions for different roles
-- **Share Feedback:** Let us know what you think at https://www.hexastacksolutions.com/
-- **Follow Updates:** Check back for new features and improvements
-
----
-
 **Thank you for using HexaCv! Good luck with your job search! 🚀**
-
-For more information, visit **https://www.hexastacksolutions.com/**
