@@ -60,6 +60,10 @@ export default function ResumeBuilder() {
             phone: parsed.header?.phone || '',
             location: parsed.header?.location || '',
             links: parsed.header?.links || [],
+            jobTitle: parsed.header?.jobTitle || '',
+            countryCode: parsed.header?.countryCode || '',
+            locationFields: parsed.header?.locationFields || {},
+            targetCountryCode: parsed.header?.targetCountryCode || '',
           }
         }
       },

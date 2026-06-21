@@ -41,7 +41,12 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
         {
           role: "system",
           content:
-            "You are an expert resume parsing system. Parse the following resume raw text into a clean, structured JSON object matching the provided schema. Extract all names, emails, phone numbers, location, linked pages, experience bullets, projects, education history, and certifications. If any fields are not found, leave them empty or omit them. Return strictly the JSON object.",
+            "You are an expert resume parsing and structuring system. Parse the following resume raw text into a clean, structured JSON object matching the schema. Follow these strict rules:\n" +
+            "1. GENUINE CONTENT ONLY: Extract and structure only information genuinely present in the original document. Do NOT invent, embellish, or write AI-created achievements, metrics, projects, duties, or sentences.\n" +
+            "2. NO DUPLICATES: Ensure no duplicate experience entries, project descriptions, skills, or bullet points.\n" +
+            "3. NO MISMATCHES: Align all company names, dates, and titles exactly as stated in the raw text.\n" +
+            "4. JOB TITLE INFERENCE: Automatically identify the candidate's core job title or target professional role based on the uploaded document's content and populate it in the 'header.jobTitle' field.\n" +
+            "5. If any fields are not found, leave them empty or omit them. Return strictly the JSON object.",
         },
         {
           role: "user",
@@ -63,6 +68,7 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
                   email: { type: "string" },
                   phone: { type: "string" },
                   location: { type: "string" },
+                  jobTitle: { type: "string", description: "Core job title or target professional role inferred from the document" },
                   links: {
                     type: "array",
                     items: {
@@ -75,7 +81,7 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
                     },
                   },
                 },
-                required: ["name", "email", "phone", "location", "links"],
+                required: ["name", "email", "phone", "location", "jobTitle", "links"],
               },
               summary: { type: "string" },
               skills: {
