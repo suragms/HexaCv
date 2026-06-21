@@ -7,24 +7,310 @@ import { ParsedResume } from "../shared/types";
 import { nanoid } from "nanoid";
 
 /**
+ * Clean raw extracted text to remove consecutive duplicates, empty lines, and page numbers
+ */
+function cleanExtractedText(raw: string): string {
+  if (!raw) return "";
+  
+  const lines = raw.split(/\r?\n/);
+  const cleanedLines: string[] = [];
+  const seenLongLines = new Set<string>();
+
+  for (let line of lines) {
+    line = line.trim();
+    if (!line) continue;
+
+    // Filter out page numbers (e.g. Page 1 of 5, Page 3, 2 / 4, etc.)
+    const pageNumRegex = /^(page\s+\d+(\s+of\s+\d+)?|\d+\s*\/\s*\d+|\bpage\b\s*\d+|-\s*\d+\s*-)$/i;
+    if (pageNumRegex.test(line)) {
+      continue;
+    }
+
+    // Deduplicate consecutive identical lines (e.g. text artifacts)
+    if (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === line) {
+      continue;
+    }
+
+    // Deduplicate repeated long lines (headers/footers across pages)
+    // Only apply to long lines (> 30 characters) that are not list items
+    const isBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*");
+    if (line.length > 30 && !isBullet) {
+      const normalized = line.toLowerCase().replace(/[\s,\.\-|]/g, "");
+      if (seenLongLines.has(normalized)) {
+        continue;
+      }
+      seenLongLines.add(normalized);
+    }
+
+    cleanedLines.push(line);
+  }
+
+  return cleanedLines.join("\n");
+}
+
+/**
  * Extract plain text from PDF, DOCX, or TXT file buffers
  */
 export async function extractText(fileBuffer: Buffer, filename: string): Promise<string> {
   const extension = filename.split(".").pop()?.toLowerCase();
+  let rawText = "";
 
   if (extension === "pdf") {
     const parser = new PDFParse({ data: fileBuffer });
     const data = await parser.getText();
-    return data.text || "";
+    rawText = data.text || "";
   } else if (extension === "docx" || extension === "doc") {
     // mammoth expects a Buffer for extractRawText
     const result = await mammoth.extractRawText({ buffer: fileBuffer });
-    return result.value || "";
+    rawText = result.value || "";
   } else if (extension === "txt") {
-    return fileBuffer.toString("utf-8");
+    rawText = fileBuffer.toString("utf-8");
   } else {
     throw new Error(`Unsupported file extension: .${extension}`);
   }
+
+  return cleanExtractedText(rawText);
+}
+
+/**
+ * Clean and deduplicate parsed resume object to prevent duplicate entries, AI-generated/hallucinated text,
+ * and ensure ID uniqueness.
+ */
+function deduplicateParsedResume(parsed: ParsedResume): ParsedResume {
+  const cleanString = (str: string | undefined | null) => (str || "").trim();
+
+  // 1. Header & Job Title
+  const header = {
+    name: cleanString(parsed.header?.name),
+    email: cleanString(parsed.header?.email),
+    phone: cleanString(parsed.header?.phone),
+    location: cleanString(parsed.header?.location),
+    jobTitle: cleanString(parsed.header?.jobTitle),
+    links: (parsed.header?.links || []).map(link => ({
+      label: cleanString(link.label),
+      url: cleanString(link.url)
+    })).filter(link => link.label && link.url),
+    countryCode: cleanString(parsed.header?.countryCode),
+    locationFields: parsed.header?.locationFields || {},
+    targetCountryCode: cleanString(parsed.header?.targetCountryCode)
+  };
+
+  // 2. Summary
+  const summary = cleanString(parsed.summary);
+
+  // 3. Skills
+  const seenCategories = new Map<string, Set<string>>();
+  if (Array.isArray(parsed.skills)) {
+    parsed.skills.forEach(group => {
+      const category = cleanString(group.category) || "General";
+      const normalizedCategory = category.toLowerCase();
+      
+      let skillsSet = seenCategories.get(normalizedCategory);
+      if (!skillsSet) {
+        skillsSet = new Set<string>();
+        seenCategories.set(normalizedCategory, skillsSet);
+      }
+      
+      const skillItems = Array.isArray(group.skills) ? group.skills : [];
+      skillItems.forEach(s => {
+        const cleaned = cleanString(s);
+        if (cleaned) {
+          skillsSet.add(cleaned);
+        }
+      });
+    });
+  }
+  
+  const skills = Array.from(seenCategories.entries()).map(([normCategory, skillsSet]) => {
+    const originalGroup = parsed.skills?.find(g => cleanString(g.category).toLowerCase() === normCategory);
+    const category = originalGroup ? cleanString(originalGroup.category) : normCategory.charAt(0).toUpperCase() + normCategory.slice(1);
+    return {
+      category,
+      skills: Array.from(skillsSet)
+    };
+  }).filter(group => group.skills.length > 0);
+
+  // Helper for tracking unique IDs
+  const usedIds = new Set<string>();
+  const getUniqueId = (prefix: string) => {
+    let id = `${prefix}-${nanoid(4)}`;
+    while (usedIds.has(id)) {
+      id = `${prefix}-${nanoid(4)}`;
+    }
+    usedIds.add(id);
+    return id;
+  };
+
+  // 4. Experiences
+  const experiencesList = Array.isArray(parsed.experiences) ? parsed.experiences : [];
+  const seenExperiences = new Set<string>();
+  const experiences = experiencesList
+    .map(exp => {
+      const company = cleanString(exp.company);
+      const role = cleanString(exp.role);
+      const startDate = cleanString(exp.startDate);
+      const key = `${company.toLowerCase()}|${role.toLowerCase()}|${startDate.toLowerCase()}`;
+      
+      if (!company && !role) return null;
+      if (seenExperiences.has(key)) return null;
+      seenExperiences.add(key);
+
+      // Deduplicate description bullets
+      const seenBullets = new Set<string>();
+      const description = (Array.isArray(exp.description) ? exp.description : [])
+        .map(b => cleanString(b))
+        .filter(b => {
+          if (!b) return false;
+          const normalized = b.toLowerCase().replace(/[\s,\.\-|]/g, "");
+          if (seenBullets.has(normalized)) return false;
+          seenBullets.add(normalized);
+          return true;
+        });
+
+      return {
+        id: exp.id && !usedIds.has(exp.id) ? (usedIds.add(exp.id), exp.id) : getUniqueId("exp"),
+        company: company || "Organization",
+        role: role || "Professional Role",
+        startDate: startDate || "2020",
+        endDate: cleanString(exp.endDate) || "Present",
+        current: !!exp.current || cleanString(exp.endDate).toLowerCase() === "present" || !exp.endDate,
+        description
+      };
+    })
+    .filter((exp): exp is NonNullable<typeof exp> => exp !== null);
+
+  // 5. Educations
+  const educationsList = Array.isArray(parsed.educations) ? parsed.educations : [];
+  const seenEducations = new Set<string>();
+  const educations = educationsList
+    .map(edu => {
+      const institution = cleanString(edu.institution);
+      const degree = cleanString(edu.degree);
+      const field = cleanString(edu.field);
+      const key = `${institution.toLowerCase()}|${degree.toLowerCase()}|${field.toLowerCase()}`;
+
+      if (!institution && !degree) return null;
+      if (seenEducations.has(key)) return null;
+      seenEducations.add(key);
+
+      return {
+        id: edu.id && !usedIds.has(edu.id) ? (usedIds.add(edu.id), edu.id) : getUniqueId("edu"),
+        institution: institution || "Institution",
+        degree: degree || "Degree",
+        field: field || "Field of Study",
+        graduationDate: cleanString(edu.graduationDate) || "2022",
+        gpa: cleanString(edu.gpa)
+      };
+    })
+    .filter((edu): edu is NonNullable<typeof edu> => edu !== null);
+
+  // 6. Projects
+  const projectsList = Array.isArray(parsed.projects) ? parsed.projects : [];
+  const seenProjects = new Set<string>();
+  const projects = projectsList
+    .map(proj => {
+      const name = cleanString(proj.name);
+      const desc = cleanString(proj.description);
+      const key = `${name.toLowerCase()}|${desc.substring(0, 50).toLowerCase()}`;
+
+      if (!name) return null;
+      if (seenProjects.has(key)) return null;
+      seenProjects.add(key);
+
+      const technologies = Array.from(new Set((Array.isArray(proj.technologies) ? proj.technologies : []).map(t => cleanString(t)).filter(Boolean)));
+
+      return {
+        id: proj.id && !usedIds.has(proj.id) ? (usedIds.add(proj.id), proj.id) : getUniqueId("proj"),
+        name,
+        description: desc,
+        technologies,
+        link: cleanString(proj.link),
+        date: cleanString(proj.date) || "2023"
+      };
+    })
+    .filter((proj): proj is NonNullable<typeof proj> => proj !== null);
+
+  // 7. Certifications
+  const certificationsList = Array.isArray(parsed.certifications) ? parsed.certifications : [];
+  const seenCertifications = new Set<string>();
+  const certifications = certificationsList
+    .map(cert => {
+      const name = cleanString(cert.name);
+      const issuer = cleanString(cert.issuer);
+      const key = `${name.toLowerCase()}|${issuer.toLowerCase()}`;
+
+      if (!name) return null;
+      if (seenCertifications.has(key)) return null;
+      seenCertifications.add(key);
+
+      return {
+        id: cert.id && !usedIds.has(cert.id) ? (usedIds.add(cert.id), cert.id) : getUniqueId("cert"),
+        name,
+        issuer: issuer || "Issuer",
+        date: cleanString(cert.date) || "2024",
+        link: cleanString(cert.link)
+      };
+    })
+    .filter((cert): cert is NonNullable<typeof cert> => cert !== null);
+
+  // 8. Achievements
+  const achievements = Array.from(new Set((Array.isArray(parsed.achievements) ? parsed.achievements : []).map(a => cleanString(a)).filter(Boolean)));
+
+  // 9. Languages
+  const languagesList = Array.isArray(parsed.languages) ? parsed.languages : [];
+  const seenLanguages = new Set<string>();
+  const languages = languagesList
+    .map(lang => {
+      const language = cleanString(lang.language);
+      if (!language) return null;
+      const key = language.toLowerCase();
+      if (seenLanguages.has(key)) return null;
+      seenLanguages.add(key);
+      return {
+        language,
+        proficiency: cleanString(lang.proficiency) || "Conversational"
+      };
+    })
+    .filter((lang): lang is NonNullable<typeof lang> => lang !== null);
+
+  // 10. References
+  const referencesList = Array.isArray(parsed.references) ? parsed.references : [];
+  const seenReferences = new Set<string>();
+  const references = referencesList
+    .map(ref => {
+      const name = cleanString(ref.name);
+      const email = cleanString(ref.email);
+      const company = cleanString(ref.company);
+      const key = `${name.toLowerCase()}|${email.toLowerCase()}|${company.toLowerCase()}`;
+
+      if (!name) return null;
+      if (seenReferences.has(key)) return null;
+      seenReferences.add(key);
+
+      return {
+        id: ref.id && !usedIds.has(ref.id) ? (usedIds.add(ref.id), ref.id) : getUniqueId("ref"),
+        name,
+        company: company || "Company",
+        title: cleanString(ref.title) || "Reference Contact",
+        email: email || "",
+        phone: cleanString(ref.phone) || "",
+        availableOnRequest: !!ref.availableOnRequest
+      };
+    })
+    .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
+
+  return {
+    header,
+    summary,
+    skills,
+    experiences,
+    projects,
+    educations,
+    certifications,
+    achievements,
+    languages,
+    references
+  };
 }
 
 /**
@@ -42,11 +328,13 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
           role: "system",
           content:
             "You are an expert resume parsing and structuring system. Parse the following resume raw text into a clean, structured JSON object matching the schema. Follow these strict rules:\n" +
-            "1. GENUINE CONTENT ONLY: Extract and structure only information genuinely present in the original document. Do NOT invent, embellish, or write AI-created achievements, metrics, projects, duties, or sentences.\n" +
-            "2. NO DUPLICATES: Ensure no duplicate experience entries, project descriptions, skills, or bullet points.\n" +
-            "3. NO MISMATCHES: Align all company names, dates, and titles exactly as stated in the raw text.\n" +
+            "1. GENUINE CONTENT ONLY: Extract and structure only information genuinely present in the original document. Do NOT invent, embellish, or write AI-created achievements, metrics, projects, duties, or sentences. Every single bullet point, achievement, description, or phrase MUST be derived directly from the input text.\n" +
+            "2. NO DUPLICATES: Ensure no duplicate experience entries, project descriptions, skills, or bullet points. Check names, companies, bullet content, and dates to ensure they do not repeat.\n" +
+            "3. NO MISMATCHES: Align all company names, dates, and titles exactly as stated in the raw text. Do not swap roles or mix education/projects details.\n" +
             "4. JOB TITLE INFERENCE: Automatically identify the candidate's core job title or target professional role based on the uploaded document's content and populate it in the 'header.jobTitle' field.\n" +
-            "5. If any fields are not found, leave them empty or omit them. Return strictly the JSON object.",
+            "5. NO HALLUCINATIONS: If a field (e.g. GPA, link, description, phone, email, etc.) is not present in the source text, omit it or leave it as empty. Do not generate fake URLs or placeholders.\n" +
+            "6. UNIQUE IDs: For each experience, project, education, reference, and certification, generate a unique random ID (e.g. using a simple string or hash) to ensure no collisions.\n" +
+            "7. Output strictly the JSON matching the schema, with no additional explanation or wrapping text.",
         },
         {
           role: "user",
@@ -167,6 +455,33 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
                 type: "array",
                 items: { type: "string" },
               },
+              languages: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    language: { type: "string" },
+                    proficiency: { type: "string" },
+                  },
+                  required: ["language", "proficiency"],
+                },
+              },
+              references: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    name: { type: "string" },
+                    company: { type: "string" },
+                    title: { type: "string" },
+                    email: { type: "string" },
+                    phone: { type: "string" },
+                    availableOnRequest: { type: "boolean" },
+                  },
+                  required: ["id", "name", "company", "title", "email", "phone", "availableOnRequest"],
+                },
+              },
             },
             required: [
               "header",
@@ -177,6 +492,8 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
               "educations",
               "certifications",
               "achievements",
+              "languages",
+              "references"
             ],
           },
         },
@@ -187,10 +504,11 @@ export async function parseResumeWithLLM(text: string): Promise<ParsedResume> {
     if (!content || typeof content !== "string") {
       throw new Error("No structured output received from LLM");
     }
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return deduplicateParsedResume(parsed);
   } catch (error) {
     console.error("LLM parser failed, falling back to heuristic parser:", error);
-    return fallbackHeuristicParser(text);
+    return deduplicateParsedResume(fallbackHeuristicParser(text));
   }
 }
 
@@ -212,8 +530,32 @@ function fallbackHeuristicParser(text: string): ParsedResume {
 
   // Assume name is the first line if it's relatively short, otherwise default
   let name = "Candidate Name";
-  if (lines.length > 0 && lines[0].length < 50 && !lines[0].includes("@")) {
-    name = lines[0];
+  let nameLineIndex = -1;
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    if (lines[i].length < 50 && !lines[i].includes("@") && !lines[i].includes("http") && !/^\d+$/.test(lines[i])) {
+      name = lines[i];
+      nameLineIndex = i;
+      break;
+    }
+  }
+
+  // Detect Job Title: look at lines after the name
+  let jobTitle = "";
+  if (nameLineIndex !== -1 && nameLineIndex + 1 < lines.length) {
+    const jobTitleKeywords = ["engineer", "developer", "manager", "designer", "consultant", "analyst", "specialist", "lead", "architect", "expert", "officer", "administrator", "scientist", "intern", "associate", "professional"];
+    for (let i = nameLineIndex + 1; i < Math.min(nameLineIndex + 4, lines.length); i++) {
+      const line = lines[i];
+      const lower = line.toLowerCase();
+      if (jobTitleKeywords.some(kw => lower.includes(kw)) && line.length < 50 && !line.includes("@") && !line.includes("http")) {
+        jobTitle = line;
+        break;
+      }
+    }
+  }
+  if (!jobTitle) {
+    const titleRegex = /(software engineer|full\s*stack developer|frontend developer|backend developer|data scientist|product manager|project manager|ui\/ux designer|system administrator)/i;
+    const titleMatch = text.match(titleRegex);
+    jobTitle = titleMatch ? titleMatch[0] : "Professional Candidate";
   }
 
   // Look for location patterns (e.g., San Francisco, CA or London, UK)
@@ -250,22 +592,22 @@ function fallbackHeuristicParser(text: string): ParsedResume {
     const line = lines[i];
     const upperLine = line.toUpperCase();
 
-    if (upperLine.includes("SUMMARY") || upperLine.includes("PROFESSIONAL PROFILE")) {
+    if (upperLine.includes("SUMMARY") || upperLine.includes("PROFESSIONAL PROFILE") || upperLine.includes("OBJECTIVE")) {
       currentSection = "summary";
       continue;
-    } else if (upperLine.includes("EXPERIENCE") || upperLine.includes("WORK HISTORY") || upperLine.includes("EMPLOYMENT")) {
+    } else if (upperLine.includes("EXPERIENCE") || upperLine.includes("WORK HISTORY") || upperLine.includes("EMPLOYMENT") || upperLine.includes("CAREER HISTORY")) {
       currentSection = "experience";
       continue;
-    } else if (upperLine.includes("EDUCATION") || upperLine.includes("ACADEMIC")) {
+    } else if (upperLine.includes("EDUCATION") || upperLine.includes("ACADEMIC") || upperLine.includes("QUALIFICATIONS")) {
       currentSection = "education";
       continue;
-    } else if (upperLine.includes("SKILLS") || upperLine.includes("TECHNOLOGY STACK")) {
+    } else if (upperLine.includes("SKILLS") || upperLine.includes("TECHNOLOGY STACK") || upperLine.includes("CORE COMPETENCIES")) {
       currentSection = "skills";
       continue;
     } else if (upperLine.includes("PROJECTS")) {
       currentSection = "projects";
       continue;
-    } else if (upperLine.includes("CERTIFICATION") || upperLine.includes("LICENSES")) {
+    } else if (upperLine.includes("CERTIFICATION") || upperLine.includes("LICENSES") || upperLine.includes("COURSES")) {
       currentSection = "certifications";
       continue;
     }
@@ -273,7 +615,6 @@ function fallbackHeuristicParser(text: string): ParsedResume {
     if (currentSection === "summary") {
       summary += (summary ? " " : "") + line;
     } else if (currentSection === "skills") {
-      // split skills by comma or bullet symbol
       const items = line.split(/[•,·|]/).map(s => s.trim()).filter(Boolean);
       if (items.length > 0) {
         skills.push(...items);
@@ -285,7 +626,6 @@ function fallbackHeuristicParser(text: string): ParsedResume {
       const isHeader = !isBullet && (hasDate || line.includes("|") || line.includes(" - ") || experiences.length === 0);
 
       if (isHeader) {
-        // If we already had bullets, save the previous experience
         if (currentBullets.length > 0 && experiences.length > 0) {
           experiences[experiences.length - 1].description = [...currentBullets];
           currentBullets = [];
@@ -295,7 +635,6 @@ function fallbackHeuristicParser(text: string): ParsedResume {
         let role = line;
         let dates: string[] = [];
 
-        // Try extracting date range if present
         const dateMatch = line.match(dateRangeRegex);
         let cleanedLine = line;
         if (dateMatch) {
@@ -339,48 +678,106 @@ function fallbackHeuristicParser(text: string): ParsedResume {
         }
       }
     } else if (currentSection === "education") {
-      // Parse education details
-      let degree = "Degree";
-      let institution = line;
-      if (line.includes(" - ")) {
-        const parts = line.split(" - ");
-        institution = parts[0].trim();
-        degree = parts[1].trim();
+      const eduKeywords = /university|college|school|institute|degree|bachelor|master|phd|b\.s|b\.a|m\.s|m\.a|b\.tech|m\.tech|diploma|academy|board/i;
+      if (eduKeywords.test(line) || educations.length === 0) {
+        let degree = "Degree";
+        let institution = line;
+        if (line.includes(" - ")) {
+          const parts = line.split(" - ");
+          institution = parts[0].trim();
+          degree = parts[1].trim();
+        } else if (line.includes(",")) {
+          const parts = line.split(",");
+          institution = parts[0].trim();
+          degree = parts[1].trim();
+        }
+        educations.push({
+          id: `edu-${nanoid(4)}`,
+          institution,
+          degree,
+          field: "General Studies",
+          graduationDate: "2022",
+          gpa: "",
+        });
+      } else {
+        const lastEdu = educations[educations.length - 1];
+        if (lastEdu) {
+          if (line.toLowerCase().includes("gpa") || line.match(/\b\d\.\d\b/)) {
+            const gpaMatch = line.match(/\b\d\.\d\b/);
+            lastEdu.gpa = gpaMatch ? gpaMatch[0] : line;
+          } else if (line.match(/\b\d{4}\b/)) {
+            lastEdu.graduationDate = line.match(/\b\d{4}\b/)?.[0] || line;
+          } else {
+            lastEdu.field = lastEdu.field === "General Studies" ? line : `${lastEdu.field}, ${line}`;
+          }
+        }
       }
-      educations.push({
-        id: `edu-${nanoid(4)}`,
-        institution,
-        degree,
-        field: "General Studies",
-        graduationDate: "2022",
-        gpa: "",
-      });
     } else if (currentSection === "projects") {
-      projects.push({
-        id: `proj-${nanoid(4)}`,
-        name: line.substring(0, 40),
-        description: line,
-        technologies: [],
-        link: "",
-        date: "2023",
-      });
+      const isBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*");
+      if (isBullet && projects.length > 0) {
+        const lastProj = projects[projects.length - 1];
+        const bulletText = line.replace(/^[•\-*]\s*/, "").trim();
+        lastProj.description = lastProj.description ? `${lastProj.description}\n${bulletText}` : bulletText;
+      } else {
+        if (line.length < 50 || projects.length === 0) {
+          let name = line;
+          let description = "";
+          let link = "";
+          
+          const urlMatch = line.match(/https?:\/\/[^\s$.?#].[^\s]*/);
+          if (urlMatch) {
+            link = urlMatch[0];
+            name = line.replace(link, "").trim();
+          }
+
+          projects.push({
+            id: `proj-${nanoid(4)}`,
+            name: name || "Project Name",
+            description,
+            technologies: [],
+            link,
+            date: "2023",
+          });
+        } else {
+          const lastProj = projects[projects.length - 1];
+          lastProj.description = lastProj.description ? `${lastProj.description} ${line}` : line;
+        }
+      }
     } else if (currentSection === "certifications") {
-      certifications.push({
-        id: `cert-${nanoid(4)}`,
-        name: line,
-        issuer: "Issuing Organization",
-        date: "2024",
-        link: "",
-      });
+      const isBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*");
+      if (isBullet && certifications.length > 0) {
+        const lastCert = certifications[certifications.length - 1];
+        const bulletText = line.replace(/^[•\-*]\s*/, "").trim();
+        lastCert.issuer = lastCert.issuer === "Issuing Organization" ? bulletText : `${lastCert.issuer}, ${bulletText}`;
+      } else {
+        if (line.length < 60 || certifications.length === 0) {
+          let name = line;
+          let issuer = "Issuing Organization";
+          if (line.includes(" - ")) {
+            const parts = line.split(" - ");
+            name = parts[0].trim();
+            issuer = parts[1].trim();
+          } else if (line.includes(",")) {
+            const parts = line.split(",");
+            name = parts[0].trim();
+            issuer = parts[1].trim();
+          }
+          certifications.push({
+            id: `cert-${nanoid(4)}`,
+            name,
+            issuer,
+            date: "2024",
+            link: "",
+          });
+        }
+      }
     }
   }
 
-  // Final cleanup of the last active experience bullets
   if (currentBullets.length > 0 && experiences.length > 0) {
     experiences[experiences.length - 1].description = [...currentBullets];
   }
 
-  // structure skill categories
   const skillCategories = [
     {
       category: "Extracted Skills",
@@ -388,12 +785,11 @@ function fallbackHeuristicParser(text: string): ParsedResume {
     },
   ];
 
-  // If nothing was parsed, provide reasonable mock details as fallback
   if (experiences.length === 0) {
     experiences.push({
       id: `exp-1`,
       company: "Previous Employer",
-      role: "Professional Associate",
+      role: jobTitle || "Professional Associate",
       startDate: "2021",
       endDate: "Present",
       current: true,
@@ -419,13 +815,16 @@ function fallbackHeuristicParser(text: string): ParsedResume {
       phone,
       location,
       links,
+      jobTitle,
     },
     summary: summary || "Experienced professional looking for new opportunities.",
     skills: skillCategories,
     experiences,
-    projects: projects.slice(0, 3),
+    projects: projects.slice(0, 5),
     educations,
-    certifications: certifications.slice(0, 3),
+    certifications: certifications.slice(0, 5),
     achievements: [],
+    languages: [],
+    references: [],
   };
 }

@@ -25,7 +25,10 @@ function formatDateForResume(dateStr: string, dateFormat: string): string {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[14.5px] font-bold tracking-wider text-emerald-800 uppercase border-b border-slate-200 pb-1 mb-2 mt-5 first:mt-0 font-sans">
+    <h2 
+      className="text-[14.5px] font-bold tracking-wider text-emerald-800 uppercase border-b border-slate-200 pb-1 mb-2 mt-5 first:mt-0"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
+    >
       {children}
     </h2>
   );
@@ -33,9 +36,20 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function BulletList({ items }: { items: string[] }) {
   return (
-    <ul className="list-disc pl-4.5 space-y-1 mt-1 font-sans">
+    <ul 
+      className="list-disc pl-5 space-y-1 mt-1 text-slate-700" 
+      style={{ 
+        listStyleType: 'disc', 
+        paddingLeft: '1.25rem',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      }}
+    >
       {items.map((item, i) => (
-        <li key={i} className="text-[13px] leading-relaxed text-slate-700">
+        <li 
+          key={i} 
+          className="text-[13px] leading-relaxed text-slate-700 pl-0.5 marker:text-emerald-700"
+          style={{ listStyleType: 'disc' }}
+        >
           {item}
         </li>
       ))}
@@ -126,10 +140,11 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
       <div
         id="resume-pdf-content"
         className={cn(
-          "bg-white shadow-xl w-[210mm] min-h-[297mm] text-slate-800 flex flex-col p-10 font-sans"
+          "bg-white shadow-xl w-[210mm] min-h-[297mm] text-slate-800 flex flex-col p-10"
         )}
         style={{
           zoom: zoom / 100,
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         }}
       >
         {/* Header */}
