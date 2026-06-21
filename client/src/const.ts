@@ -4,13 +4,14 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 export const getLoginUrl = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
+
+  // In local development or when no OAuth portal is configured, use the local login page
+  if (!oauthPortalUrl) {
+    return "/login";
+  }
+
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
   const state = btoa(redirectUri);
-
-  if (!oauthPortalUrl) {
-    console.error("VITE_OAUTH_PORTAL_URL is not defined in environment variables.");
-    return "#/error-missing-oauth-url";
-  }
 
   try {
     const url = new URL(`${oauthPortalUrl}/app-auth`);
@@ -24,6 +25,7 @@ export const getLoginUrl = () => {
     return url.toString();
   } catch (error) {
     console.error("Failed to construct OAuth login URL:", error);
-    return "#/error-invalid-oauth-url";
+    // Fallback to local login page
+    return "/login";
   }
 };
