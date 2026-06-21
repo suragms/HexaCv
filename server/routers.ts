@@ -35,7 +35,7 @@ export const appRouter = router({
       return db.listResumes(ctx.user.id);
     }),
     
-    parse: protectedProcedure
+    parse: publicProcedure
       .input(z.object({
         filename: z.string(),
         base64: z.string(),
