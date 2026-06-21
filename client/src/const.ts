@@ -5,8 +5,12 @@ export const getLoginUrl = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
 
-  // In local development or when no OAuth portal is configured, use the local login page
-  if (!oauthPortalUrl) {
+  // In local development or when no OAuth portal is configured, use the local login page.
+  // We check for localhost and the placeholder domain to prevent cached environment variables from causing issues.
+  if (!oauthPortalUrl || 
+      oauthPortalUrl.includes("auth.hexastacksolutions.com") || 
+      window.location.hostname === "localhost" || 
+      window.location.hostname === "127.0.0.1") {
     return "/login";
   }
 
