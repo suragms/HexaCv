@@ -21,6 +21,7 @@ import CountryLocationFields from './CountryLocationFields';
 import { exportResumeToPDF, exportResumeToDOCX } from '@/lib/pdfExport';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
+import { trpc } from '@/lib/trpc';
 
 const WIZARD_STEPS = [
   { id: 1, label: 'Contact', key: 'header', icon: User },
@@ -48,6 +49,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [selectedJob, setSelectedJob] = useState<string>(resume.jobDescriptionId || '');
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [activeEditTab, setActiveEditTab] = useState<string>('header');
+  const [isRewritingSummary, setIsRewritingSummary] = useState<boolean>(false);
+  const improveSummaryMutation = trpc.ai.improveSummary.useMutation();
   const [zoom, setZoom] = useState<number>(70); // Set default zoom to 70% to fit live preview side-by-side
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
@@ -562,6 +565,41 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     updateResumeData({ ...localResume, sections: updated });
   };
 
+  const handleRewriteSummary = async () => {
+    const currentSummary = getSectionContent('summary').summary || '';
+    const activeJob = PRESET_JOBS.find(j => j.id === selectedJob);
+    const jobDescription = activeJob ? activeJob.description : '';
+
+    if (!jobDescription) {
+      toast.error('Please select a Target Job at the top right first to tailor your summary.');
+      return;
+    }
+
+    setIsRewritingSummary(true);
+    try {
+      const headerSec = localResume.sections.find(s => s.type === 'header');
+      const headerVal = (headerSec?.content.header || {}) as any;
+      
+      const rewritten = await improveSummaryMutation.mutateAsync({
+        currentSummary,
+        jobDescription,
+        jobTitle: headerVal.jobTitle || headerVal.title || '',
+        countryCode: headerVal.countryCode || '',
+        targetCountryCode: headerVal.targetCountryCode || ''
+      });
+
+      if (rewritten) {
+        updateSection('summary', { summary: rewritten });
+        toast.success('Summary rewritten and optimized with AI!');
+      }
+    } catch (err: any) {
+      console.error('Error rewriting summary:', err);
+      toast.error(err?.message || 'Failed to rewrite summary with AI.');
+    } finally {
+      setIsRewritingSummary(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full font-sans text-slate-800">
       {/* LEFT COLUMN - Edit Form with Guided Step Stepper */}
@@ -827,14 +865,39 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
                 {/* SUMMARY TAB */}
                 <TabsContent value="summary" className="space-y-4">
-                  <h3 className="font-bold text-slate-800 text-base font-medium">Professional Summary</h3>
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-summary">Profile Description</Label>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-base font-medium">Professional Summary</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="edit-summary" className="text-slate-700 font-semibold">Profile Description</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRewriteSummary}
+                        disabled={isRewritingSummary}
+                        className="bg-emerald-50 text-emerald-700 border-emerald-250 hover:bg-emerald-100 hover:text-emerald-800 gap-1.5 h-8 font-bold text-xs"
+                      >
+                        {isRewritingSummary ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                            Rewriting...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                            Rewrite with AI
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <Textarea
                       id="edit-summary"
+                      placeholder="Write a brief professional summary highlighting your key skills, experience, and achievements..."
                       value={getSectionContent('summary').summary || ''}
                       onChange={(e) => updateSection('summary', { summary: e.target.value })}
                       rows={8}
+                      className="border-slate-200 focus-visible:ring-emerald-500 rounded-lg text-sm leading-relaxed"
                     />
                   </div>
                 </TabsContent>

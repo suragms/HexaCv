@@ -336,6 +336,86 @@ Return as a JSON array of strings.`,
 }
 
 /**
+ * Generate improved/tailored professional summary
+ */
+export async function improveSummary(
+  currentSummary: string,
+  jobDescription: string,
+  jobTitle?: string,
+  countryCode?: string,
+  targetCountryCode?: string
+): Promise<string> {
+  let regionalInstructions = "";
+  if (targetCountryCode) {
+    try {
+      const rules = await db.getCountryAtsRules(countryCode || "IN", targetCountryCode);
+      if (rules) {
+        regionalInstructions = `
+REGIONAL OPTIMIZATION INSTRUCTIONS (${countryCode || "IN"} -> ${targetCountryCode}):
+- Target country formatting style details: ${rules.preferredFormatting}
+- Target country keywords: ${Array.isArray(rules.keywords) ? rules.keywords.join(", ") : rules.keywords}
+- Regional Terminology conversions (prefer target terms): ${JSON.stringify(rules.regionalTerminology)}
+`;
+      }
+    } catch (e) {
+      console.warn("Failed to load regional rules for summary improvement:", e);
+    }
+  }
+
+  const response = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert resume writer. Rewrite the professional summary to be extremely compelling, modern, concise (2-4 sentences), and aligned with the job description." + 
+          (regionalInstructions ? ` Adhere strictly to these regional constraints:\n${regionalInstructions}` : ""),
+      },
+      {
+        role: "user",
+        content: `Current Summary: ${currentSummary || "(Not provided)"}
+Target Job Title: ${jobTitle || "(Not specified)"}
+Target Job Description:
+${jobDescription}
+
+Provide an improved, high-impact professional summary that:
+1. Highlights key skills, experience, and value proposition
+2. Incorporates important keywords from the job description
+3. Adheres to any regional hiring styles or terminology if target is specified
+4. Is concise, engaging, and professional (between 2 to 4 sentences or ~50-80 words max)
+5. Do NOT invent fake credentials, degrees, or company names; build upon the candidate's professional profile.
+
+Return as a JSON object with a single field "summary".`,
+      },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "improved_summary",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            summary: {
+              type: "string",
+              description: "The rewritten professional summary",
+            },
+          },
+          required: ["summary"],
+        },
+      },
+    },
+  });
+
+  const content = response.choices[0]?.message.content;
+  if (!content || typeof content !== "string") {
+    throw new Error("No response from LLM");
+  }
+
+  const result = JSON.parse(content);
+  return result.summary;
+}
+
+/**
  * Extract all text from resume for analysis
  */
 function extractResumeText(resume: Resume): string {

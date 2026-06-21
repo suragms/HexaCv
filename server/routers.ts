@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { generateResumeSuggestions, improveBulletPoints, calculateKeywordAlignment } from "./aiSuggestions";
+import { generateResumeSuggestions, improveBulletPoints, calculateKeywordAlignment, improveSummary } from "./aiSuggestions";
 import { nanoid } from "nanoid";
 import { invokeLLM } from "./_core/llm";
 import { extractText, parseResumeWithLLM } from "./fileParser";
@@ -431,6 +431,24 @@ export const appRouter = router({
           input.company,
           input.currentBullets,
           input.jobDescription,
+          input.countryCode,
+          input.targetCountryCode
+        );
+      }),
+
+    improveSummary: publicProcedure
+      .input(z.object({
+        currentSummary: z.string(),
+        jobDescription: z.string(),
+        jobTitle: z.string().optional(),
+        countryCode: z.string().optional(),
+        targetCountryCode: z.string().optional()
+      }))
+      .mutation(async ({ input }) => {
+        return improveSummary(
+          input.currentSummary,
+          input.jobDescription,
+          input.jobTitle,
           input.countryCode,
           input.targetCountryCode
         );
