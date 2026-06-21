@@ -1,6 +1,6 @@
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+const { PDFParse } = require("pdf-parse");
 import mammoth from "mammoth";
 import { invokeLLM } from "./_core/llm";
 import { ParsedResume } from "../shared/types";
@@ -13,8 +13,8 @@ export async function extractText(fileBuffer: Buffer, filename: string): Promise
   const extension = filename.split(".").pop()?.toLowerCase();
 
   if (extension === "pdf") {
-    // pdf-parse expects a Buffer
-    const data = await pdfParse(fileBuffer);
+    const parser = new PDFParse({ data: fileBuffer });
+    const data = await parser.getText();
     return data.text || "";
   } else if (extension === "docx" || extension === "doc") {
     // mammoth expects a Buffer for extractRawText
