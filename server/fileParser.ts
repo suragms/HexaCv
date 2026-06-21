@@ -273,44 +273,64 @@ function fallbackHeuristicParser(text: string): ParsedResume {
         skills.push(...items);
       }
     } else if (currentSection === "experience") {
-      // detect if it's a bullet point
-      if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
-        const bulletText = line.replace(/^[•\-*]\s*/, "").trim();
-        if (bulletText) currentBullets.push(bulletText);
-      } else {
-        // Assume it's a job title or company
+      const isBullet = line.startsWith("•") || line.startsWith("-") || line.startsWith("*");
+      const dateRangeRegex = /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|present|current|\d{4})\s*(?:[-–—to]+|present|current)\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|present|current|\d{4})/i;
+      const hasDate = dateRangeRegex.test(line);
+      const isHeader = !isBullet && (hasDate || line.includes("|") || line.includes(" - ") || experiences.length === 0);
+
+      if (isHeader) {
         // If we already had bullets, save the previous experience
         if (currentBullets.length > 0 && experiences.length > 0) {
           experiences[experiences.length - 1].description = [...currentBullets];
           currentBullets = [];
         }
 
-        // Try parsing Company & Role from "Role at Company" or "Company - Role"
         let company = "Organization";
         let role = line;
-        if (line.includes(" at ")) {
-          const parts = line.split(" at ");
+        let dates: string[] = [];
+
+        // Try extracting date range if present
+        const dateMatch = line.match(dateRangeRegex);
+        let cleanedLine = line;
+        if (dateMatch) {
+          const dateStr = dateMatch[0];
+          cleanedLine = line.replace(dateStr, "").trim();
+          cleanedLine = cleanedLine.replace(/^[|,\s-]+|[|,\s-]+$/g, "").trim();
+          dates = dateStr.split(/[-–—to]+/i).map(d => d.trim());
+        }
+
+        if (cleanedLine.includes(" at ")) {
+          const parts = cleanedLine.split(" at ");
           role = parts[0].trim();
           company = parts[1].trim();
-        } else if (line.includes(" - ")) {
-          const parts = line.split(" - ");
+        } else if (cleanedLine.includes(" - ")) {
+          const parts = cleanedLine.split(" - ");
           company = parts[0].trim();
           role = parts[1].trim();
-        } else if (line.includes("|")) {
-          const parts = line.split("|");
+        } else if (cleanedLine.includes("|")) {
+          const parts = cleanedLine.split("|");
           company = parts[0].trim();
           role = parts[1].trim();
+        } else if (cleanedLine.includes(",")) {
+          const parts = cleanedLine.split(",");
+          role = parts[0].trim();
+          company = parts[1].trim();
         }
 
         experiences.push({
           id: `exp-${nanoid(4)}`,
-          company,
-          role,
-          startDate: "2020",
-          endDate: "Present",
-          current: true,
+          company: company || "Organization",
+          role: role || "Professional Role",
+          startDate: dates[0] || "2020",
+          endDate: dates[1] || "Present",
+          current: (dates[1] || "Present").toLowerCase() === "present",
           description: [],
         });
+      } else {
+        const bulletText = line.replace(/^[•\-*]\s*/, "").trim();
+        if (bulletText) {
+          currentBullets.push(bulletText);
+        }
       }
     } else if (currentSection === "education") {
       // Parse education details

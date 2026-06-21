@@ -25,7 +25,7 @@ function formatDateForResume(dateStr: string, dateFormat: string): string {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[13px] font-bold tracking-wide text-emerald-700 uppercase border-b border-gray-200 pb-1 mb-2 mt-5 first:mt-0">
+    <h2 className="text-[14.5px] font-bold tracking-wider text-emerald-800 uppercase border-b border-slate-200 pb-1 mb-2 mt-5 first:mt-0 font-sans">
       {children}
     </h2>
   );
@@ -33,9 +33,9 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function BulletList({ items }: { items: string[] }) {
   return (
-    <ul className="list-disc pl-4 space-y-0.5 mt-1">
+    <ul className="list-disc pl-4.5 space-y-1 mt-1 font-sans">
       {items.map((item, i) => (
-        <li key={i} className="text-[12.5px] leading-snug text-gray-800">
+        <li key={i} className="text-[13px] leading-relaxed text-slate-700">
           {item}
         </li>
       ))}
@@ -187,7 +187,7 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
                 return (
                   <section key={sec.id}>
                     <SectionHeading>Professional Summary</SectionHeading>
-                    <p className="text-[12.5px] leading-snug text-gray-800">
+                    <p className="text-[13px] leading-relaxed text-slate-700 font-sans">
                       {sec.content.summary}
                     </p>
                   </section>
@@ -197,11 +197,11 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
                 return (
                   <section key={sec.id}>
                     <SectionHeading>Technical Skills</SectionHeading>
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       {sec.content.skills.map((skillGroup: any, idx: number) => (
-                        <p key={idx} className="text-[12.5px] leading-snug">
-                          <span className="font-bold text-emerald-800">{skillGroup.category}: </span>
-                          <span className="text-gray-800">
+                        <p key={idx} className="text-[13px] leading-relaxed font-sans">
+                          <span className="font-semibold text-emerald-900">{skillGroup.category}: </span>
+                          <span className="text-slate-700">
                             {Array.isArray(skillGroup.skills) ? skillGroup.skills.join(', ') : skillGroup.skills}
                           </span>
                         </p>
@@ -215,12 +215,12 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
                   <section key={sec.id}>
                     <SectionHeading>Experience</SectionHeading>
                     {sec.content.experiences.map((exp: any, idx: number) => (
-                      <div key={exp.id || idx} className="mb-3 last:mb-0">
+                      <div key={exp.id || idx} className="mb-4 last:mb-0">
                         <div className="flex justify-between items-baseline flex-wrap gap-x-2">
-                          <h3 className="font-bold text-[13px] text-gray-900">
+                          <h3 className="font-semibold text-[13.5px] text-slate-900 font-sans">
                             {exp.role} | {exp.company}
                           </h3>
-                          <span className="text-[11.5px] italic text-gray-500 whitespace-nowrap">
+                          <span className="text-[11.5px] font-medium text-slate-500 whitespace-nowrap font-sans">
                             {formatDateForResume(exp.startDate, dateFormat)} – {formatDateForResume(exp.endDate || 'Present', dateFormat)}
                           </span>
                         </div>

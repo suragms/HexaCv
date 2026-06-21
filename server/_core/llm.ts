@@ -376,12 +376,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   let activeModel = model;
 
   if (!apiKey) {
-    if (ENV.grokApiKey) {
-      apiKey = ENV.grokApiKey;
-      activeModel = model || "llama3-8b-8192";
-    } else if (ENV.geminiApiKey) {
+    if (ENV.geminiApiKey) {
       apiKey = ENV.geminiApiKey;
       activeModel = model || "gemini-1.5-flash";
+    } else if (ENV.grokApiKey) {
+      apiKey = ENV.grokApiKey;
+      activeModel = model || "llama3-8b-8192";
     }
   }
 
