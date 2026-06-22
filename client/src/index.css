@@ -176,3 +176,106 @@
     }
   }
 }
+
+/* Premium Landing Page Keyframe Animations */
+@keyframes float-gentle-1 {
+  0%, 100% {
+    transform: translateY(0px) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(-2deg);
+  }
+}
+
+@keyframes float-gentle-2 {
+  0%, 100% {
+    transform: translateY(0px) rotate(4deg);
+  }
+  50% {
+    transform: translateY(8px) rotate(5deg);
+  }
+}
+
+@keyframes float-gentle-3 {
+  0%, 100% {
+    transform: translateY(0px) rotate(2deg) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) rotate(3deg) scale(1.03);
+  }
+}
+
+@keyframes drift-orb-1 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(25px, -35px) scale(1.15);
+  }
+}
+
+@keyframes drift-orb-2 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(-35px, 25px) scale(1.1);
+  }
+}
+
+@keyframes logo-spin-pulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.08) rotate(4deg);
+  }
+}
+
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animation Classes */
+.animate-float-resume {
+  animation: float-gentle-1 6s ease-in-out infinite;
+}
+
+.animate-float-suggestion {
+  animation: float-gentle-2 8s ease-in-out infinite;
+}
+
+.animate-float-ats {
+  animation: float-gentle-3 5s ease-in-out infinite;
+}
+
+.animate-drift-orb-1 {
+  animation: drift-orb-1 14s ease-in-out infinite;
+}
+
+.animate-drift-orb-2 {
+  animation: drift-orb-2 16s ease-in-out infinite;
+}
+
+.animate-logo-hover:hover {
+  animation: logo-spin-pulse 1.2s ease-in-out infinite;
+}
+
+.animate-fade-slide-up {
+  animation: fade-slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
