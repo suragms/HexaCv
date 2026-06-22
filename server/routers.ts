@@ -423,7 +423,9 @@ export const appRouter = router({
         currentBullets: z.array(z.string()),
         jobDescription: z.string(),
         countryCode: z.string().optional(),
-        targetCountryCode: z.string().optional()
+        targetCountryCode: z.string().optional(),
+        jobTitle: z.string().optional(),
+        targetRole: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         return improveBulletPoints(
@@ -432,7 +434,9 @@ export const appRouter = router({
           input.currentBullets,
           input.jobDescription,
           input.countryCode,
-          input.targetCountryCode
+          input.targetCountryCode,
+          input.jobTitle,
+          input.targetRole
         );
       }),
 
@@ -441,8 +445,9 @@ export const appRouter = router({
         currentSummary: z.string(),
         jobDescription: z.string(),
         jobTitle: z.string().optional(),
+        targetRole: z.string().optional(),
         countryCode: z.string().optional(),
-        targetCountryCode: z.string().optional()
+        targetCountryCode: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         return improveSummary(
@@ -450,7 +455,8 @@ export const appRouter = router({
           input.jobDescription,
           input.jobTitle,
           input.countryCode,
-          input.targetCountryCode
+          input.targetCountryCode,
+          input.targetRole
         );
       }),
 

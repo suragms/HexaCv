@@ -8,6 +8,7 @@ export interface ResumeHeader {
   location: string;
   links: { label: string; url: string }[];
   jobTitle?: string;
+  targetRole?: string;
   // Structured location fields (optional — backward compatible)
   countryCode?: string;                    // ISO 3166-1 alpha-2 (e.g. "IN", "US")
   locationFields?: Record<string, string>; // e.g. { state: "Kerala", city: "Kochi", postalCode: "682001" }

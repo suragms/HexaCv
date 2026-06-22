@@ -1,6 +1,22 @@
 import { invokeLLM } from "./_core/llm";
 import { Resume } from "@shared/types";
 import * as db from "./db";
+import {
+  filterGroundedBullets,
+  filterGroundedRewrite,
+  isAiGeneratedPhrase,
+} from "./contentValidation";
+
+const STRICT_REWRITE_RULES =
+  "CRITICAL RULES — you MUST follow all of these:\n" +
+  "1. ONLY rephrase existing facts from the candidate's content. Do NOT invent achievements, metrics, companies, degrees, tools, or responsibilities.\n" +
+  "2. Do NOT add new bullet points. Rewrite only the bullets provided — same count, same underlying facts.\n" +
+  "3. Do NOT use generic AI filler phrases (e.g. 'results-driven', 'synergy', 'leveraged', 'spearheaded' unless the original used similar language).\n" +
+  "4. Preserve all company names, dates, technologies, and numbers exactly as stated.\n" +
+  "5. Tailor wording to the candidate's job title and target role using keywords from the job description, but never fabricate experience.\n" +
+  "6. If a bullet cannot be improved without inventing facts, return it nearly unchanged.\n" +
+  "7. NEVER add skills, experiences, education, or sentences that are not in the source material.\n" +
+  "8. Return empty strings or empty arrays rather than inventing placeholder content.\n";
 
 export interface BulletSuggestion {
   original: string;
@@ -47,6 +63,10 @@ export async function generateResumeSuggestions(
   const skillsSection = resume.sections.find((s) => s.type === "skills");
   const experienceSection = resume.sections.find((s) => s.type === "experience");
 
+  const headerData = headerSection?.content.header;
+  const jobTitle = headerData?.jobTitle || "";
+  const targetRole = headerData?.targetRole || jobTitle;
+
   const currentSummary = summarySection?.content.summary || "";
   const currentSkills = skillsSection?.content.skills || [];
   const currentExperiences = experienceSection?.content.experiences || [];
@@ -75,6 +95,8 @@ REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCod
   // Build prompt for LLM
   const prompt = buildSuggestionPrompt(
     jobDescription,
+    jobTitle,
+    targetRole,
     currentSummary,
     currentSkills,
     currentExperiences,
@@ -87,7 +109,10 @@ REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCod
         {
           role: "system",
           content:
-            "You are an expert resume writer and career coach. Your task is to provide specific, actionable suggestions to improve a resume for a target job. Always respond with valid JSON.",
+            "You are an expert resume reviewer. Suggest improvements using ONLY facts already in the resume. " +
+            "Do NOT invent skills, bullets, companies, or achievements. Do NOT add new bullet points. " +
+            "Rephrase existing content to align with the job title, target role, and job description. " +
+            "Always respond with valid JSON.",
         },
         {
           role: "user",
@@ -113,7 +138,7 @@ REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCod
                   suggestedSkills: {
                     type: "array",
                     items: { type: "string" },
-                    description: "New skills to add based on job requirements",
+                    description: "Existing resume skills that align with the job (do not invent new skills)",
                   },
                   keywordMatches: {
                     type: "array",
@@ -150,7 +175,7 @@ REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCod
                     newBullets: {
                       type: "array",
                       items: { type: "string" },
-                      description: "New bullet points to add for this role",
+                      description: "Must always be an empty array — never suggest new bullets",
                     },
                   },
                   required: ["role", "company", "suggestedBullets", "newBullets"],
@@ -173,6 +198,16 @@ REGIONAL TARGETING AND ATS CONTEXT (${countryCode || "IN"} to ${targetCountryCod
     }
 
     const suggestions = JSON.parse(content) as ResumeSuggestions;
+    // Strip any invented new bullets the model may have added despite instructions
+    if (suggestions.experience) {
+      suggestions.experience = suggestions.experience.map((exp) => ({
+        ...exp,
+        newBullets: [],
+        suggestedBullets: (exp.suggestedBullets || []).filter(
+          (b) => b.original && b.suggested && b.original.trim() !== b.suggested.trim()
+        ),
+      }));
+    }
     return suggestions;
   } catch (error) {
     console.error("Error generating resume suggestions:", error);
@@ -259,7 +294,9 @@ export async function improveBulletPoints(
   currentBullets: string[],
   jobDescription: string,
   countryCode?: string,
-  targetCountryCode?: string
+  targetCountryCode?: string,
+  jobTitle?: string,
+  targetRole?: string
 ): Promise<string[]> {
   let regionalInstructions = "";
   if (targetCountryCode) {
@@ -283,27 +320,29 @@ REGIONAL OPTIMIZATION INSTRUCTIONS (${countryCode || "IN"} -> ${targetCountryCod
       {
         role: "system",
         content:
-          "You are an expert resume writer. Improve bullet points to be more impactful and aligned with job requirements. Focus on quantifiable results, action verbs, and relevant skills." + 
+          STRICT_REWRITE_RULES +
+          "You are an expert resume writer. Rephrase bullet points to be clearer and better aligned with the target job — without adding new facts." +
           (regionalInstructions ? ` Adhere strictly to these regional constraints:\n${regionalInstructions}` : ""),
       },
       {
         role: "user",
-        content: `Role: ${role} at ${company}
-Current Bullet Points:
+        content: `Candidate Job Title: ${jobTitle || role || "(Not specified)"}
+Target Role: ${targetRole || jobTitle || "(Not specified)"}
+Role: ${role} at ${company}
+Current Bullet Points (${currentBullets.length} total — return exactly ${currentBullets.length} rephrased bullets):
 ${currentBullets.map((b) => `- ${b}`).join("\n")}
 
 Target Job Description:
 ${jobDescription}
 
-Provide improved versions of these bullet points that:
-1. Highlight relevant skills and achievements
-2. Use strong action verbs
-3. Include quantifiable results where possible
-4. Align with the job description keywords
-5. Adhere to any regional terminology (e.g. use ZIP Code instead of PIN Code if target is USA)
-6. Are concise and impactful
+Rephrase each bullet to:
+1. Use stronger action verbs while keeping the same facts
+2. Incorporate relevant keywords from the job description where they match existing experience
+3. Stay concise and impactful
+4. NEVER add metrics, tools, or achievements not in the original bullets
+5. Return exactly ${currentBullets.length} bullets in the same order
 
-Return as a JSON array of strings.`,
+Return as a JSON object with a "bullets" array of strings.`,
       },
     ],
     response_format: {
@@ -324,6 +363,7 @@ Return as a JSON array of strings.`,
         },
       },
     },
+    temperature: 0.2,
   });
 
   const content = response.choices[0]?.message.content;
@@ -332,7 +372,8 @@ Return as a JSON array of strings.`,
   }
 
   const result = JSON.parse(content);
-  return result.bullets;
+  const rawBullets: string[] = Array.isArray(result.bullets) ? result.bullets : [];
+  return filterGroundedBullets(currentBullets, rawBullets);
 }
 
 /**
@@ -343,8 +384,13 @@ export async function improveSummary(
   jobDescription: string,
   jobTitle?: string,
   countryCode?: string,
-  targetCountryCode?: string
+  targetCountryCode?: string,
+  targetRole?: string
 ): Promise<string> {
+  if (!currentSummary.trim()) {
+    return "";
+  }
+
   let regionalInstructions = "";
   if (targetCountryCode) {
     try {
@@ -367,22 +413,25 @@ REGIONAL OPTIMIZATION INSTRUCTIONS (${countryCode || "IN"} -> ${targetCountryCod
       {
         role: "system",
         content:
-          "You are an expert resume writer. Rewrite the professional summary to be extremely compelling, modern, concise (2-4 sentences), and aligned with the job description." + 
+          STRICT_REWRITE_RULES +
+          "You are an expert resume writer. Rewrite the professional summary to be compelling and aligned with the target job — using only facts from the current summary." +
           (regionalInstructions ? ` Adhere strictly to these regional constraints:\n${regionalInstructions}` : ""),
       },
       {
         role: "user",
         content: `Current Summary: ${currentSummary || "(Not provided)"}
-Target Job Title: ${jobTitle || "(Not specified)"}
+Candidate Job Title: ${jobTitle || "(Not specified)"}
+Target Role: ${targetRole || jobTitle || "(Not specified)"}
 Target Job Description:
 ${jobDescription}
 
-Provide an improved, high-impact professional summary that:
-1. Highlights key skills, experience, and value proposition
-2. Incorporates important keywords from the job description
-3. Adheres to any regional hiring styles or terminology if target is specified
-4. Is concise, engaging, and professional (between 2 to 4 sentences or ~50-80 words max)
-5. Do NOT invent fake credentials, degrees, or company names; build upon the candidate's professional profile.
+Rewrite the professional summary to:
+1. Highlight skills and experience already stated in the current summary
+2. Incorporate relevant keywords from the job description only where they match existing experience
+3. Align tone with the target role and job title
+4. Be concise (2-4 sentences, ~50-80 words max)
+5. Do NOT invent credentials, degrees, years of experience, or company names
+6. If the current summary is empty, return an empty string — do not fabricate content
 
 Return as a JSON object with a single field "summary".`,
       },
@@ -404,6 +453,7 @@ Return as a JSON object with a single field "summary".`,
         },
       },
     },
+    temperature: 0.2,
   });
 
   const content = response.choices[0]?.message.content;
@@ -412,7 +462,13 @@ Return as a JSON object with a single field "summary".`,
   }
 
   const result = JSON.parse(content);
-  return result.summary;
+  const rewritten = (result.summary || "").trim();
+
+  if (!rewritten || isAiGeneratedPhrase(rewritten)) {
+    return currentSummary;
+  }
+
+  return filterGroundedRewrite(currentSummary, rewritten, 0.15);
 }
 
 /**
@@ -463,6 +519,8 @@ function extractResumeText(resume: Resume): string {
  */
 function buildSuggestionPrompt(
   jobDescription: string,
+  jobTitle: string,
+  targetRole: string,
   currentSummary: string,
   currentSkills: any[],
   currentExperiences: any[],
@@ -481,8 +539,11 @@ function buildSuggestionPrompt(
     })
     .join("\n\n");
 
-  return `Please analyze this resume and job description, then provide specific suggestions to improve the resume for this job.
+  return `Analyze this resume against the target job. Use ONLY content already in the resume — do not invent facts, skills, or bullets.
 ${regionalInstructions ? `\n${regionalInstructions}\n` : ""}
+CANDIDATE JOB TITLE: ${jobTitle || "(from resume)"}
+TARGET ROLE: ${targetRole || jobTitle || "(from resume)"}
+
 CURRENT RESUME:
 Professional Summary: ${currentSummary || "(Not provided)"}
 
@@ -495,13 +556,13 @@ ${experienceText || "(Not provided)"}
 TARGET JOB DESCRIPTION:
 ${jobDescription}
 
-Please provide:
-1. An improved professional summary tailored to this job (incorporating target country expectations/style)
-2. Suggested skills to add based on job requirements (and target country rules)
+Provide:
+1. A rephrased professional summary using ONLY facts from the current summary, tailored to the job title and target role
+2. Existing skills from the resume that align with the job (do NOT suggest skills not already listed)
 3. Keywords from the job that match the resume
 4. Important keywords missing from the resume
-5. For each experience entry, suggest improvements to bullet points and new bullets to add (optimized for the target country hiring expectations and terminology)
-6. Overall advice for tailoring this resume to the job
+5. For each experience entry, suggest rephrased bullet points (same count, same facts — no new bullets). Set newBullets to [] always.
+6. Overall advice for tailoring this resume without adding fabricated content
 
 Format your response as JSON with the structure provided.`;
 }

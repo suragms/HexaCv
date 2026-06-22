@@ -10,5 +10,6 @@ export const ENV = {
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiApiKey2: process.env.GEMINI_API_KEY_2 ?? "",
   grokApiKey: process.env.GROK_API_KEY ?? "",
+  huggingfaceApiKey: process.env.HUGGINGFACE_API_KEY ?? process.env.HF_TOKEN ?? "",
 };
 

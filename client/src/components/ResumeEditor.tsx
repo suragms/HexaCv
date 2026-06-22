@@ -15,7 +15,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Resume, TemplateId, ParsedResume, ResumeSection } from '@shared/types';
 import { TEMPLATES } from '@/lib/templates';
-import { PRESET_JOBS } from '@/lib/jobDescriptions';
+import { PRESET_JOBS, matchPresetJobByTitle } from '@/lib/jobDescriptions';
+import { ensureStandardResumeSections } from '@/lib/resumeSections';
 import ResumePreview from './ResumePreview';
 import CountryLocationFields from './CountryLocationFields';
 import { exportResumeToPDF, exportResumeToDOCX } from '@/lib/pdfExport';
@@ -24,18 +25,18 @@ import { nanoid } from 'nanoid';
 import { trpc } from '@/lib/trpc';
 
 const WIZARD_STEPS = [
-  { id: 1, label: 'Contact', key: 'header', icon: User },
+  { id: 1, label: 'Header', key: 'header', icon: User },
   { id: 2, label: 'Summary', key: 'summary', icon: AlignLeft },
   { id: 3, label: 'Skills', key: 'skills', icon: Code },
   { id: 4, label: 'Experience', key: 'experience', icon: Briefcase },
   { id: 5, label: 'Projects', key: 'projects', icon: Folder },
   { id: 6, label: 'Education', key: 'education', icon: GraduationCap },
   { id: 7, label: 'Credentials', key: 'certifications', icon: Award },
-  { id: 8, label: 'Languages', key: 'languages', icon: Globe },
-  { id: 9, label: 'References', key: 'references', icon: Users },
-  { id: 10, label: 'Custom', key: 'custom', icon: LayoutList },
-  { id: 11, label: 'Layout', key: 'layout', icon: Settings },
-  { id: 12, label: 'Review', key: 'achievements', icon: Trophy },
+  { id: 8, label: 'Achievements', key: 'achievements', icon: Trophy },
+  { id: 9, label: 'Languages', key: 'languages', icon: Globe },
+  { id: 10, label: 'References', key: 'references', icon: Users },
+  { id: 11, label: 'Custom', key: 'custom', icon: LayoutList },
+  { id: 12, label: 'Layout', key: 'layout', icon: Settings },
 ];
 
 interface ResumeEditorProps {
@@ -50,7 +51,20 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [activeEditTab, setActiveEditTab] = useState<string>('header');
   const [isRewritingSummary, setIsRewritingSummary] = useState<boolean>(false);
+  const [rewritingExpId, setRewritingExpId] = useState<string | null>(null);
   const improveSummaryMutation = trpc.ai.improveSummary.useMutation();
+  const improveBulletsMutation = trpc.ai.improveBullets.useMutation();
+
+  // Auto-select target job from parsed job title / target role when not already set
+  useEffect(() => {
+    if (selectedJob) return;
+    const headerSec = resume.sections.find(s => s.type === 'header');
+    const headerVal = (headerSec?.content.header || {}) as any;
+    const matched = matchPresetJobByTitle(headerVal.jobTitle, headerVal.targetRole);
+    if (matched) {
+      setSelectedJob(matched);
+    }
+  }, [resume.id]);
   const [zoom, setZoom] = useState<number>(70); // Set default zoom to 70% to fit live preview side-by-side
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
@@ -115,39 +129,19 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
   // Keep localResume in sync with outside resume (e.g. from parent initial state or undo/redo)
   useEffect(() => {
-    // If the base changes (e.g., loaded new resume or undid/redid), update local state
     setLocalResume(resume);
   }, [resume.id]);
 
-  // Ensure missing sections are initialized for backwards compatibility
+  // Ensure all 10 standard resume sections exist in correct order
   useEffect(() => {
-    const typesPresent = resume.sections.map(s => s.type);
-    let updatedSections = [...resume.sections];
-    let changed = false;
-    
-    const missingTypes: ('languages' | 'references' | 'custom')[] = [];
-    if (!typesPresent.includes('languages')) missingTypes.push('languages');
-    if (!typesPresent.includes('references')) missingTypes.push('references');
-    if (!typesPresent.includes('custom')) missingTypes.push('custom');
-    
-    if (missingTypes.length > 0) {
-      let maxOrder = Math.max(...resume.sections.map(s => s.order), 0);
-      missingTypes.forEach(type => {
-        maxOrder++;
-        updatedSections.push({
-          id: nanoid(),
-          type: type as any,
-          order: maxOrder,
-          visible: true,
-          content: type === 'languages' ? { languages: [] } : type === 'references' ? { references: [] } : { customSections: [] }
-        });
-      });
-      changed = true;
-    }
-    
-    if (changed) {
-      onUpdate({ ...resume, sections: updatedSections });
-      setLocalResume({ ...resume, sections: updatedSections });
+    const normalized = ensureStandardResumeSections(resume);
+    const orderChanged = normalized.sections.some(
+      (s, i) => s.type !== resume.sections[i]?.type || s.order !== resume.sections[i]?.order
+    );
+    const missingSection = normalized.sections.length !== resume.sections.length;
+    if (orderChanged || missingSection) {
+      onUpdate(normalized);
+      setLocalResume(normalized);
     }
   }, [resume.id]);
 
@@ -575,6 +569,11 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       return;
     }
 
+    if (!currentSummary.trim()) {
+      toast.error('Add a professional summary from your resume before rewriting.');
+      return;
+    }
+
     setIsRewritingSummary(true);
     try {
       const headerSec = localResume.sections.find(s => s.type === 'header');
@@ -584,6 +583,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         currentSummary,
         jobDescription,
         jobTitle: headerVal.jobTitle || headerVal.title || '',
+        targetRole: headerVal.targetRole || headerVal.jobTitle || '',
         countryCode: headerVal.countryCode || '',
         targetCountryCode: headerVal.targetCountryCode || ''
       });
@@ -597,6 +597,50 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       toast.error(err?.message || 'Failed to rewrite summary with AI.');
     } finally {
       setIsRewritingSummary(false);
+    }
+  };
+
+  const handleRewriteExperienceBullets = async (expIndex: number) => {
+    const activeJob = PRESET_JOBS.find(j => j.id === selectedJob);
+    const jobDescription = activeJob ? activeJob.description : '';
+
+    if (!jobDescription) {
+      toast.error('Please select a Target Job first to tailor experience bullets.');
+      return;
+    }
+
+    const experiences = getSectionContent('experience').experiences || [];
+    const exp = experiences[expIndex];
+    if (!exp || !exp.description?.length) {
+      toast.error('Add at least one bullet point before rewriting.');
+      return;
+    }
+
+    const headerSec = localResume.sections.find(s => s.type === 'header');
+    const headerVal = (headerSec?.content.header || {}) as any;
+
+    setRewritingExpId(exp.id || String(expIndex));
+    try {
+      const improved = await improveBulletsMutation.mutateAsync({
+        role: exp.role || '',
+        company: exp.company || '',
+        currentBullets: exp.description,
+        jobDescription,
+        jobTitle: headerVal.jobTitle || '',
+        targetRole: headerVal.targetRole || headerVal.jobTitle || '',
+        countryCode: headerVal.countryCode || '',
+        targetCountryCode: headerVal.targetCountryCode || '',
+      });
+
+      const list = [...experiences];
+      list[expIndex] = { ...exp, description: improved };
+      updateSection('experience', { experiences: list });
+      toast.success('Experience bullets rewritten using your job title and target role.');
+    } catch (err: any) {
+      console.error('Error rewriting bullets:', err);
+      toast.error(err?.message || 'Failed to rewrite experience bullets.');
+    } finally {
+      setRewritingExpId(null);
     }
   };
 
@@ -719,9 +763,21 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <Label htmlFor="edit-jobtitle">Job Title</Label>
                       <Input
                         id="edit-jobtitle"
+                        placeholder="Current or most recent role"
                         value={getSectionContent('header').header?.jobTitle || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, jobTitle: e.target.value }
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-targetrole">Target Role</Label>
+                      <Input
+                        id="edit-targetrole"
+                        placeholder="Role you are targeting (auto-detected from resume)"
+                        value={getSectionContent('header').header?.targetRole || ''}
+                        onChange={(e) => updateSection('header', {
+                          header: { ...getSectionContent('header').header, targetRole: e.target.value }
                         })}
                       />
                     </div>
@@ -1062,7 +1118,28 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         </div>
 
                         <div className="space-y-1">
-                          <Label className="text-xs">Description Bullets (one per line)</Label>
+                          <div className="flex justify-between items-center">
+                            <Label className="text-xs">Description Bullets (one per line)</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={rewritingExpId === (exp.id || String(idx))}
+                              onClick={() => handleRewriteExperienceBullets(idx)}
+                              className="h-7 text-[10px] font-bold gap-1 bg-emerald-50 text-emerald-700 border-emerald-200"
+                            >
+                              {rewritingExpId === (exp.id || String(idx)) ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                                  Rewriting...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-3 h-3" />
+                                  Rewrite Bullets
+                                </>
+                              )}
+                            </Button>
+                          </div>
                           <Textarea
                             value={exp.description.join('\n')}
                             onChange={(e) => {

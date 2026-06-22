@@ -234,6 +234,41 @@ export function getJobById(id: string): JobDescription | undefined {
   return PRESET_JOBS.find((job) => job.id === id);
 }
 
+/** Match a preset target job from parsed resume job title / target role */
+export function matchPresetJobByTitle(jobTitle?: string, targetRole?: string): string {
+  const combined = `${jobTitle || ""} ${targetRole || ""}`.toLowerCase().trim();
+  if (!combined) return "";
+
+  const rules: { id: string; patterns: RegExp[] }[] = [
+    { id: "full-stack-dev", patterns: [/full[\s-]?stack/, /fullstack/] },
+    { id: "frontend-eng", patterns: [/front[\s-]?end/, /ui developer/, /react developer/] },
+    { id: "backend-eng", patterns: [/back[\s-]?end/, /server[\s-]?side/] },
+    { id: "devops-eng", patterns: [/devops/, /site reliability/, /\bsre\b/, /infrastructure engineer/] },
+    { id: "data-scientist", patterns: [/data scien/, /machine learning/, /\bml engineer/] },
+    { id: "product-manager", patterns: [/product manager/, /product owner/] },
+    { id: "ui-ux-designer", patterns: [/ui[\s\/]?ux/, /ux designer/, /product designer/] },
+    { id: "qa-engineer", patterns: [/\bqa\b/, /quality assurance/, /test engineer/] },
+  ];
+
+  for (const rule of rules) {
+    if (rule.patterns.some((p) => p.test(combined))) {
+      return rule.id;
+    }
+  }
+
+  let bestId = "";
+  let bestScore = 0;
+  for (const job of PRESET_JOBS) {
+    const titleWords = job.title.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const score = titleWords.filter((w) => combined.includes(w)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = job.id;
+    }
+  }
+  return bestScore >= 1 ? bestId : "";
+}
+
 export function extractKeywords(description: string): string[] {
   // Simple keyword extraction - in production, use NLP
   const keywords: string[] = [];

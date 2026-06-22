@@ -69,16 +69,21 @@ export default function JobBoard({ activeResume }: JobBoardProps) {
 
       const experiences = experienceSection.content.experiences;
       const updatedExperiences = [];
+      const headerSection = resumeObj.sections?.find((s: any) => s.type === "header");
+      const headerVal = headerSection?.content?.header || {};
 
       for (const exp of experiences) {
         toast.info(`Optimizing bullets for ${exp.role} at ${exp.company}...`);
-        
-        // Call backend improveBullets
+
         const improved = await improveBulletsMutation.mutateAsync({
           role: exp.role || "",
           company: exp.company || "",
           currentBullets: exp.description || [],
           jobDescription: job.requirements || job.description || "",
+          jobTitle: headerVal.jobTitle || exp.role || "",
+          targetRole: headerVal.targetRole || headerVal.jobTitle || "",
+          countryCode: headerVal.countryCode || "",
+          targetCountryCode: headerVal.targetCountryCode || "",
         });
 
         updatedExperiences.push({

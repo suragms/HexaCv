@@ -15,6 +15,8 @@ import { nanoid } from 'nanoid';
 import { useResumeStorage } from '@/_core/hooks/useResumeStorage';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { toast } from 'sonner';
+import { matchPresetJobByTitle } from '@/lib/jobDescriptions';
+import { ensureStandardResumeSections } from '@/lib/resumeSections';
 
 export default function ResumeBuilder() {
   const { isAuthenticated } = useAuth();
@@ -61,6 +63,7 @@ export default function ResumeBuilder() {
             location: parsed.header?.location || '',
             links: parsed.header?.links || [],
             jobTitle: parsed.header?.jobTitle || '',
+            targetRole: parsed.header?.targetRole || parsed.header?.jobTitle || '',
             countryCode: parsed.header?.countryCode || '',
             locationFields: parsed.header?.locationFields || {},
             targetCountryCode: parsed.header?.targetCountryCode || '',
@@ -71,62 +74,82 @@ export default function ResumeBuilder() {
         id: nanoid(),
         type: 'summary',
         order: 2,
-        visible: !!parsed.summary,
-        content: { summary: parsed.summary }
+        visible: true,
+        content: { summary: parsed.summary || '' }
       },
       {
         id: nanoid(),
         type: 'skills',
         order: 3,
-        visible: parsed.skills && parsed.skills.length > 0,
+        visible: true,
         content: { skills: parsed.skills || [] }
       },
       {
         id: nanoid(),
         type: 'experience',
         order: 4,
-        visible: parsed.experiences && parsed.experiences.length > 0,
+        visible: true,
         content: { experiences: parsed.experiences || [] }
       },
       {
         id: nanoid(),
         type: 'projects',
         order: 5,
-        visible: parsed.projects && parsed.projects.length > 0,
+        visible: true,
         content: { projects: parsed.projects || [] }
       },
       {
         id: nanoid(),
         type: 'education',
         order: 6,
-        visible: parsed.educations && parsed.educations.length > 0,
+        visible: true,
         content: { educations: parsed.educations || [] }
       },
       {
         id: nanoid(),
         type: 'certifications',
         order: 7,
-        visible: parsed.certifications && parsed.certifications.length > 0,
+        visible: true,
         content: { certifications: parsed.certifications || [] }
       },
       {
         id: nanoid(),
         type: 'achievements',
         order: 8,
-        visible: !!(parsed.achievements && parsed.achievements.length > 0),
+        visible: true,
         content: { achievements: parsed.achievements || [] }
+      },
+      {
+        id: nanoid(),
+        type: 'languages',
+        order: 9,
+        visible: true,
+        content: { languages: parsed.languages || [] }
+      },
+      {
+        id: nanoid(),
+        type: 'references',
+        order: 10,
+        visible: true,
+        content: { references: parsed.references || [] }
       }
     ];
 
-    return {
+    const matchedJobId = matchPresetJobByTitle(
+      parsed.header?.jobTitle,
+      parsed.header?.targetRole || parsed.header?.jobTitle
+    );
+
+    return ensureStandardResumeSections({
       id: nanoid(),
       userId: isAuthenticated ? 'user' : 'guest',
       title: parsed.header?.name ? `${parsed.header.name}'s Resume` : 'Untitled Resume',
       templateId: 'classic-ats-blue',
+      jobDescriptionId: matchedJobId || undefined,
       sections,
       createdAt: new Date(),
       updatedAt: new Date()
-    };
+    });
   };
 
   const handleResumeLoad = async (parsed: ParsedResume) => {
@@ -138,7 +161,15 @@ export default function ResumeBuilder() {
     try {
       const saved = await storage.saveResume(newResume);
       setActiveResume(saved);
-      toast.success("Draft saved successfully!");
+      const jobTitle = parsed.header?.jobTitle;
+      const targetRole = parsed.header?.targetRole;
+      if (jobTitle || targetRole) {
+        toast.success(
+          `Resume parsed. Job title: ${jobTitle || "—"}, Target role: ${targetRole || jobTitle || "—"}`
+        );
+      } else {
+        toast.success("Draft saved successfully!");
+      }
     } catch (e: any) {
       toast.error("Failed to save resume: " + e.message);
     }
