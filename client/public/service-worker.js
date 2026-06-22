@@ -1,9 +1,11 @@
-const CACHE_NAME = 'hexacv-v2';
+const CACHE_NAME = 'hexacv-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 // Install event - cache assets
@@ -48,34 +50,59 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 1. Bypass all API requests (never cache dynamic backend endpoints in SW)
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
+  // 2. Handle navigation requests (index.html/pages) using a Network-First strategy
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Offline fallback
+          return caches.match('/index.html') || caches.match('/');
+        })
+    );
+    return;
+  }
+
+  // 3. Handle static assets using a Cache-First / Fallback to Network strategy
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) {
-        return response;
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
       }
 
       return fetch(event.request)
         .then((response) => {
-          // Don't cache non-successful responses
+          // Don't cache invalid responses
           if (!response || response.status !== 200 || response.type === 'error') {
             return response;
           }
 
-          // Clone the response
-          const responseToCache = response.clone();
-
-          // Cache successful responses for certain types
-          if (event.request.url.includes('/api/')) {
-            // Cache API responses
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          } else if (
-            event.request.url.endsWith('.js') ||
-            event.request.url.endsWith('.css') ||
-            event.request.url.endsWith('.woff2')
+          // Cache specific static assets dynamically
+          const url = event.request.url;
+          if (
+            url.endsWith('.js') ||
+            url.endsWith('.css') ||
+            url.endsWith('.woff2') ||
+            url.endsWith('.png') ||
+            url.endsWith('.jpg') ||
+            url.endsWith('.jpeg') ||
+            url.endsWith('.svg') ||
+            url.endsWith('.ico')
           ) {
-            // Cache static assets
+            const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, responseToCache);
             });
@@ -84,8 +111,10 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Return offline page or cached response
-          return caches.match('/index.html');
+          // For static assets, if offline and not in cache, fallback to index.html if appropriate
+          if (event.request.destination === 'document') {
+            return caches.match('/index.html');
+          }
         });
     })
   );
