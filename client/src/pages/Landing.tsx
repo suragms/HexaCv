@@ -89,7 +89,7 @@ export default function Landing() {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-tight tracking-tight">
               Build Your Perfect Resume with{' '}
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent">
-                AI Alignment
+                Precision Match
               </span>
             </h1>
             
@@ -166,7 +166,7 @@ export default function Landing() {
                 <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
                   <Zap className="w-3 h-3 fill-current" />
                 </div>
-                <div className="font-semibold text-xs text-slate-100">AI Alignment Suggestion</div>
+                <div className="font-semibold text-xs text-slate-100">Smart Alignment Suggestion</div>
               </div>
               <p className="text-[9px] text-slate-300 leading-relaxed mb-3">
                 Add <span className="text-blue-400 font-semibold">"Architected cloud-native microservices"</span> to match target job keyword: <span className="text-emerald-400">"Cloud Architecture"</span>.
@@ -220,7 +220,7 @@ export default function Landing() {
               },
               {
                 icon: <Zap className="w-5 h-5" />,
-                title: 'AI Tailored Alignment',
+                title: 'Precision Job Matching',
                 description: 'Match your resume to any job description. Get instant missing keyword suggestions and content edits.',
               },
               {
@@ -403,7 +403,7 @@ export default function Landing() {
                 <span className="font-bold text-white text-lg tracking-tight">HexaCv</span>
               </div>
               <p className="text-sm leading-relaxed text-slate-400">
-                Next-generation AI-powered resume building and optimization platform.
+                Next-generation smart resume building and optimization platform.
               </p>
             </div>
             
