@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Download, Eye, Edit3, Settings, Undo, Redo, ZoomIn, ZoomOut, 
+  Download, Eye, EyeOff, Edit3, Settings, Undo, Redo, ZoomIn, ZoomOut, 
   Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown,
   User, AlignLeft, Code, Briefcase, Folder, GraduationCap, Award, Trophy,
   PanelLeft, PanelLeftClose, Globe, Users, LayoutList, ChevronLeft, ChevronRight
@@ -67,8 +67,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   }, [resume.id]);
   const [zoom, setZoom] = useState<number>(70); // Set default zoom to 70% to fit live preview side-by-side
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
-  const [isTabsListCollapsed, setIsTabsListCollapsed] = useState<boolean>(false);
+  const [showLivePreview, setShowLivePreview] = useState<boolean>(true);
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
   // Scrollbar and navigation state for horizontal stepper
@@ -116,12 +115,15 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   };
 
-  // Auto-scroll active tab into view when activeEditTab changes
+  // Auto-scroll active tab into view when activeEditTab changes (with layout delay)
   useEffect(() => {
-    const activeEl = stepperRef.current?.querySelector(`[data-step-key="${activeEditTab}"]`);
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }
+    const timer = setTimeout(() => {
+      const activeEl = stepperRef.current?.querySelector(`[data-step-key="${activeEditTab}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [activeEditTab]);
 
   const [countriesList, setCountriesList] = useState<any[]>([]);
@@ -752,7 +754,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full font-sans text-slate-800">
       {/* LEFT COLUMN - Edit Form with Guided Step Stepper */}
-      <div className="col-span-12 lg:col-span-7 flex flex-col gap-4 h-full">
+      <div className={cn(
+        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
+        showLivePreview ? "lg:col-span-7" : "lg:col-span-12"
+      )}>
         {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm shrink-0">
           <div className="flex items-center gap-3">
@@ -790,6 +795,18 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
             
             <div className="flex gap-1">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className={cn(
+                  "h-8 w-8 border-slate-200 rounded-lg hidden lg:flex items-center justify-center transition-all",
+                  !showLivePreview && "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100/50"
+                )} 
+                onClick={() => setShowLivePreview(!showLivePreview)}
+                title={showLivePreview ? "Hide Live Preview" : "Show Live Preview"}
+              >
+                {showLivePreview ? <EyeOff className="w-3.5 h-3.5 text-slate-600" /> : <Eye className="w-3.5 h-3.5 text-emerald-600" />}
+              </Button>
               <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 rounded-lg" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo">
                 <Undo className="w-3.5 h-3.5 text-slate-600" />
               </Button>
@@ -2253,10 +2270,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           </div>
         </Card>
       </div>
-
       {/* RIGHT COLUMN - Live Preview */}
       <div className={cn(
-        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300 lg:col-span-5",
+        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
+        showLivePreview ? "lg:col-span-5 lg:flex" : "lg:hidden",
         previewMode === 'edit' ? "hidden lg:flex" : "flex"
       )}>
         {/* Toggle Mode header on mobile (hidden on desktop) */}
