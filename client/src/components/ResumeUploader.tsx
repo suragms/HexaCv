@@ -14,6 +14,7 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parseMutation = trpc.resume.parse.useMutation();
@@ -38,9 +39,22 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
     setFile(selectedFile);
   };
 
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDragActive(false);
 
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
@@ -93,10 +107,18 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
       {/* File Upload Area */}
       <div
         onDrop={handleDrop}
-        onDragOver={(e) => e.preventDefault()}
-        className="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center hover:border-blue-400 hover:bg-blue-50 transition cursor-pointer"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`border-2 border-dashed rounded-2xl p-14 text-center transition-all duration-300 cursor-pointer group relative overflow-hidden ${
+          isDragActive 
+            ? 'border-blue-500 bg-blue-50/40 shadow-lg shadow-blue-500/5' 
+            : 'border-slate-200 hover:border-blue-450 hover:bg-slate-50/40 hover:shadow-md'
+        }`}
         onClick={() => fileInputRef.current?.click()}
       >
+        {/* Subtle grid mesh background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f006_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f006_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none"></div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -109,53 +131,61 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
           }}
         />
 
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Upload className="w-8 h-8 text-blue-600" />
+        <div className="flex flex-col items-center gap-5 relative z-10">
+          <div className="relative w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
+            <Upload className="w-9 h-9 text-white animate-pulse" style={{ animationDuration: '3s' }} />
           </div>
-          <div>
-            <p className="font-semibold text-slate-900">Drag and drop your resume</p>
-            <p className="text-sm text-slate-600">or click to browse</p>
+          
+          <div className="space-y-1">
+            <p className="font-extrabold text-slate-800 text-base sm:text-lg">Drag and drop your resume file</p>
+            <p className="text-sm text-slate-550 font-medium">or <span className="text-blue-600 font-bold hover:underline">browse files</span> on your device</p>
           </div>
-          <p className="text-xs text-slate-500">Supports PDF, Word (.docx), and plain text (.txt) files up to 10MB</p>
+          
+          {/* Format Badges */}
+          <div className="flex gap-2 justify-center pt-1.5">
+            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">PDF</span>
+            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">DOCX</span>
+            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">TXT</span>
+          </div>
+
+          <p className="text-xs text-slate-400 font-semibold">Maximum file size: 10MB</p>
         </div>
       </div>
 
       {/* File Info */}
       {file && (
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900">{file.name}</p>
-              <p className="text-sm text-slate-600">{(file.size / 1024).toFixed(2)} KB</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFile(null);
-                setSuccess(false);
-              }}
-            >
-              Remove
-            </Button>
+        <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex items-center justify-between animate-fade-slide-up">
+          <div>
+            <p className="font-bold text-slate-800 text-sm">{file.name}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{(file.size / 1024).toFixed(2)} KB</p>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-500 hover:text-red-650 hover:bg-red-50/50 rounded-lg font-semibold"
+            onClick={() => {
+              setFile(null);
+              setSuccess(false);
+            }}
+          >
+            Remove File
+          </Button>
         </div>
       )}
 
       {/* Error Alert */}
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="rounded-xl shadow-sm">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="font-medium text-xs">{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Success Alert */}
       {success && (
-        <Alert className="bg-green-50 border-green-200">
+        <Alert className="bg-green-50/50 border-green-200 rounded-xl shadow-sm">
           <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
+          <AlertDescription className="text-green-800 font-semibold text-xs leading-relaxed">
             Resume uploaded and parsed successfully! Your information is ready to edit.
           </AlertDescription>
         </Alert>
@@ -166,8 +196,7 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
         <Button
           onClick={handleUpload}
           disabled={uploading}
-          className="w-full bg-blue-600 hover:bg-blue-700 gap-2"
-          size="lg"
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold gap-2 py-6 rounded-xl shadow-md hover:shadow transition-all text-sm"
         >
           {uploading ? (
             <>
@@ -185,15 +214,23 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
 
       {/* Next Steps */}
       {success && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-slate-700 mb-3">
-            <strong>Next steps:</strong>
+        <div className="bg-blue-50/30 border border-blue-150 rounded-xl p-5 shadow-sm animate-fade-slide-up">
+          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2.5">
+            Suggested Next Steps
           </p>
-          <ol className="space-y-2 text-sm text-slate-600">
-            <li>1. Review and edit your information in the editor</li>
-            <li>2. Select a professional template</li>
-            <li>3. Choose a job description to tailor your resume</li>
-            <li>4. Export your resume as a PDF</li>
+          <ol className="space-y-2 text-xs text-slate-650 font-medium">
+            <li className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">1</span>
+              <span>Review and edit parsed resume items in the builder layout.</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">2</span>
+              <span>Compare your resume against target job description tags.</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">3</span>
+              <span>Instantly print/export to PDF when satisfied with matches.</span>
+            </li>
           </ol>
         </div>
       )}

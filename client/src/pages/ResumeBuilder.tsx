@@ -197,43 +197,46 @@ export default function ResumeBuilder() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Guest Mode Alert Banner */}
       {!isAuthenticated && activeResume && (
-        <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2 text-center text-sm font-medium shadow-inner flex items-center justify-center gap-2 relative z-50 animate-fade-in">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2.5 text-center text-sm font-medium shadow-inner flex items-center justify-center gap-2 relative z-50 animate-fade-in">
           <AlertTriangle className="w-4 h-4 animate-pulse text-white" />
           <span>Working as Guest: Your resumes are saved locally to this browser.</span>
           <Button 
             size="sm" 
             variant="secondary"
             onClick={() => setLocation("/login?convert=true")}
-            className="ml-3 bg-white text-orange-600 hover:bg-slate-100 font-semibold py-1 px-3 text-xs shadow rounded-md h-7"
+            className="ml-3 bg-white text-orange-600 hover:bg-slate-100 font-bold py-1 px-3.5 text-xs shadow-sm rounded-lg h-8 transition-colors"
           >
-            <Lock className="w-3 h-3 mr-1" />
+            <Lock className="w-3.5 h-3.5 mr-1.5" />
             Save to Account
           </Button>
         </div>
       )}
 
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="container max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div className="container max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 transition-colors">
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">HexaCv Resume Builder</h1>
-              <p className="text-sm text-slate-600">Build your ATS-friendly resume</p>
+            <div className="flex items-center gap-3">
+              <img src="/icon-192.png" alt="HexaCv Logo" className="w-9 h-9 object-contain" />
+              <div>
+                <h1 className="text-lg font-bold text-slate-900 leading-tight">HexaCv Resume Builder</h1>
+                <p className="text-xs text-slate-500 mt-0.5">Build your ATS-friendly resume</p>
+              </div>
             </div>
           </div>
           {activeResume && (
             <Button
               variant="outline"
               onClick={() => setActiveResume(null)}
-              className="border-slate-200 hover:bg-slate-50"
+              className="border-slate-200 hover:bg-slate-50 font-medium rounded-lg text-sm transition-colors"
             >
               Start New / View Drafts
             </Button>
@@ -242,23 +245,23 @@ export default function ResumeBuilder() {
       </header>
 
       {/* Main Content */}
-      <main className="container max-w-[95vw] xl:max-w-[1600px] mx-auto px-4 py-6 flex-grow flex flex-col">
+      <main className="container max-w-6xl mx-auto px-6 py-8 flex-grow flex flex-col">
         {activeResume ? (
           <div className="h-[calc(100vh-180px)] flex-grow">
             <ResumeEditor resume={activeResume} onUpdate={handleResumeUpdate} />
           </div>
         ) : (
-          <div className="space-y-6 max-w-6xl mx-auto w-full">
+          <div className="space-y-8 w-full animate-fade-slide-up">
             {/* Guest limit reminder */}
             {!isAuthenticated && resumesList.length > 0 && (
-              <Card className="border border-amber-200 bg-amber-50/50">
-                <CardContent className="p-4 flex items-center justify-between text-amber-800 text-sm">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>You have used <strong>{resumesList.length}/3</strong> guest resume slots. Sign in to unlock unlimited storage.</span>
+              <Card className="border border-amber-200 bg-amber-50/40 rounded-2xl shadow-sm">
+                <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-900 text-sm">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span>You have used <strong className="font-extrabold">{resumesList.length}/3</strong> guest resume slots. Sign in to unlock unlimited cloud storage.</span>
                   </div>
                   <Link href="/login">
-                    <Button size="sm" variant="outline" className="border-amber-300 text-amber-900 hover:bg-amber-100 text-xs">
+                    <Button size="sm" variant="outline" className="border-amber-300 text-amber-950 hover:bg-amber-100 text-xs font-bold rounded-lg shrink-0">
                       Sign In / Create Account
                     </Button>
                   </Link>
@@ -268,44 +271,44 @@ export default function ResumeBuilder() {
 
             {/* List of drafts */}
             {resumesList.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Your Saved Drafts</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-4">
+                <h3 className="text-xs font-extrabold text-slate-450 uppercase tracking-wider pl-1">Your Saved Drafts</h3>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   {resumesList.map((r) => (
                     <Card 
                       key={r.id} 
                       onClick={() => setActiveResume(r)}
-                      className="border border-slate-200 cursor-pointer hover:shadow-md transition bg-white flex flex-col justify-between"
+                      className="border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all bg-white flex flex-col justify-between rounded-xl overflow-hidden group"
                     >
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base text-slate-800 font-bold truncate">{r.title}</CardTitle>
-                        <CardDescription className="text-xs">
+                      <CardHeader className="pb-3 pt-5 px-5">
+                        <CardTitle className="text-base text-slate-800 font-bold truncate group-hover:text-blue-600 transition-colors">{r.title}</CardTitle>
+                        <CardDescription className="text-xs text-slate-500 mt-1">
                           Last edited: {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : "unknown"}
                         </CardDescription>
                       </CardHeader>
-                      <CardFooter className="pt-2 border-t border-slate-50 bg-slate-50/30 flex justify-between rounded-b-xl items-center">
-                        <Badge variant="outline" className="text-[10px] bg-white border-slate-200 text-slate-600 font-normal">
-                          {r.userId === 'guest' ? 'LocalStorage' : 'Cloud Sync'}
+                      <CardFooter className="pt-2.5 pb-3 px-5 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                        <Badge variant="outline" className="text-[10px] bg-white border-slate-200 text-slate-600 font-semibold px-2 py-0.5 rounded-md">
+                          {r.userId === 'guest' ? 'Local Storage' : 'Cloud Sync'}
                         </Badge>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                           <Button 
-                            size="icon-sm" 
+                            size="icon" 
                             variant="ghost" 
-                            className="text-slate-500 hover:text-slate-900 p-1"
+                            className="text-slate-400 hover:text-slate-700 p-1.5 h-8 w-8 rounded-lg hover:bg-slate-100 transition-all"
                             onClick={(e) => {
                               e.stopPropagation();
                               setActiveResume(r);
                             }}
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-4 h-4" />
                           </Button>
                           <Button 
-                            size="icon-sm" 
+                            size="icon" 
                             variant="ghost" 
-                            className="text-red-500 hover:bg-red-50 p-1 animate-hover"
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 h-8 w-8 rounded-lg transition-all"
                             onClick={(e) => handleDeleteDraft(r.id, e)}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </CardFooter>
@@ -314,11 +317,13 @@ export default function ResumeBuilder() {
                   {!isAuthenticated && resumesList.length < 3 && (
                     <Card 
                       onClick={() => setMode('scratch')}
-                      className="border border-dashed border-slate-300 hover:border-slate-400 bg-slate-50/50 cursor-pointer flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 transition min-h-[125px]"
+                      className="border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/10 cursor-pointer flex flex-col items-center justify-center p-6 text-center transition-all rounded-xl min-h-[125px] group"
                     >
-                      <Plus className="w-8 h-8 text-slate-400 mb-2" />
-                      <span className="text-sm font-semibold text-slate-600">Create Another Resume</span>
-                      <span className="text-xs text-slate-500 mt-0.5">({3 - resumesList.length} slots remaining)</span>
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                        <Plus className="w-5 h-5" />
+                      </div>
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Create Another Resume</span>
+                      <span className="text-xs text-slate-500 mt-1">({3 - resumesList.length} slots remaining)</span>
                     </Card>
                   )}
                 </div>
@@ -326,31 +331,31 @@ export default function ResumeBuilder() {
             )}
 
             {/* Creation tabs */}
-            <Card className="border-slate-200">
-              <div className="border-b border-slate-200 px-6 pt-6">
+            <Card className="border-slate-200 rounded-2xl shadow-sm overflow-hidden bg-white">
+              <div className="border-b border-slate-100 px-6 py-5 bg-slate-50/50">
                 <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">
-                  <TabsList className="grid w-full max-w-2xl grid-cols-4">
-                    <TabsTrigger value="upload" className="gap-2">
-                      <Upload className="w-4 h-4" />
+                  <TabsList className="grid w-full max-w-2xl grid-cols-4 bg-slate-100/80 p-1 rounded-xl">
+                    <TabsTrigger value="upload" className="gap-2 text-slate-600 font-semibold data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
+                      <Upload className="w-4 h-4 shrink-0" />
                       Upload Resume
                     </TabsTrigger>
-                    <TabsTrigger value="scratch" className="gap-2">
-                      <FileText className="w-4 h-4" />
-                      Build from Scratch
+                    <TabsTrigger value="scratch" className="gap-2 text-slate-600 font-semibold data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
+                      <FileText className="w-4 h-4 shrink-0" />
+                      Build Scratch
                     </TabsTrigger>
-                    <TabsTrigger value="ai" className="gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-600" />
-                      AI Generate
+                    <TabsTrigger value="ai" className="gap-2 text-slate-600 font-semibold data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
+                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                      Auto Generate
                     </TabsTrigger>
-                    <TabsTrigger value="linkedin" className="gap-2">
-                      <Linkedin className="w-4 h-4 text-blue-600 fill-current" />
+                    <TabsTrigger value="linkedin" className="gap-2 text-slate-600 font-semibold data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
+                      <Linkedin className="w-4 h-4 text-blue-600 fill-current shrink-0" />
                       LinkedIn Import
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
 
-              <div className="p-6">
+              <div className="p-8">
                 {mode === 'upload' && <ResumeUploader onParsed={handleResumeLoad} />}
                 {mode === 'scratch' && <ResumeScratchBuilder onComplete={handleResumeLoad} />}
                 {mode === 'ai' && <ResumeAIGenerator onGenerated={handleResumeLoad} />}
