@@ -10,7 +10,7 @@ import {
   Download, Eye, Edit3, Settings, Undo, Redo, ZoomIn, ZoomOut, 
   Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown,
   User, AlignLeft, Code, Briefcase, Folder, GraduationCap, Award, Trophy,
-  PanelLeft, PanelLeftClose, Globe, Users, LayoutList
+  PanelLeft, PanelLeftClose, Globe, Users, LayoutList, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Resume, TemplateId, ParsedResume, ResumeSection } from '@shared/types';
@@ -70,6 +70,59 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
   const [isTabsListCollapsed, setIsTabsListCollapsed] = useState<boolean>(false);
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
+
+  // Scrollbar and navigation state for horizontal stepper
+  const stepperRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScrollLimits = () => {
+    const el = stepperRef.current;
+    if (!el) return;
+    const scrollLeft = el.scrollLeft;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(scrollLeft > 2);
+    setCanScrollRight(scrollLeft < maxScroll - 2);
+  };
+
+  useEffect(() => {
+    const el = stepperRef.current;
+    if (!el) return;
+    
+    checkScrollLimits();
+    const observer = new ResizeObserver(() => {
+      checkScrollLimits();
+    });
+    observer.observe(el);
+    el.addEventListener('scroll', checkScrollLimits);
+    
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', checkScrollLimits);
+    };
+  }, []);
+
+  const scrollLeftDirection = () => {
+    const el = stepperRef.current;
+    if (el) {
+      el.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRightDirection = () => {
+    const el = stepperRef.current;
+    if (el) {
+      el.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  // Auto-scroll active tab into view when activeEditTab changes
+  useEffect(() => {
+    const activeEl = stepperRef.current?.querySelector(`[data-step-key="${activeEditTab}"]`);
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeEditTab]);
 
   const [countriesList, setCountriesList] = useState<any[]>([]);
   const [atsRules, setAtsRules] = useState<any>(null);
@@ -500,6 +553,58 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     return localResume.sections.find((s) => s.type === type)?.content || {};
   };
 
+  // Check section completeness for stepper checklist icons
+  const isStepCompleted = (stepKey: string): boolean => {
+    switch (stepKey) {
+      case 'header': {
+        const h = getSectionContent('header').header || {};
+        return !!(h.name?.trim() && h.email?.trim());
+      }
+      case 'summary':
+        return !!getSectionContent('summary').summary?.trim();
+      case 'skills': {
+        const s = getSectionContent('skills').skills || [];
+        return s.length > 0 && s.some((g: any) => g.skills && g.skills.length > 0);
+      }
+      case 'experience': {
+        const e = getSectionContent('experience').experiences || [];
+        return e.length > 0 && e.some((x: any) => x.company?.trim() && x.role?.trim());
+      }
+      case 'projects': {
+        const p = getSectionContent('projects').projects || [];
+        return p.length > 0 && p.some((pr: any) => pr.name?.trim());
+      }
+      case 'education': {
+        const edu = getSectionContent('education').educations || [];
+        return edu.length > 0 && edu.some((ed: any) => ed.institution?.trim() && ed.degree?.trim());
+      }
+      case 'certifications': {
+        const cert = getSectionContent('certifications').certifications || [];
+        return cert.length > 0 && cert.some((c: any) => c.name?.trim());
+      }
+      case 'achievements': {
+        const ach = getSectionContent('achievements').achievements || [];
+        return ach.length > 0;
+      }
+      case 'languages': {
+        const lang = getSectionContent('languages').languages || [];
+        return lang.length > 0 && lang.some((l: any) => l.language?.trim());
+      }
+      case 'references': {
+        const ref = getSectionContent('references').references || [];
+        return ref.length > 0;
+      }
+      case 'custom': {
+        const cust = getSectionContent('custom').customSections || [];
+        return cust.length > 0 && cust.some((c: any) => c.title?.trim());
+      }
+      case 'layout':
+        return true; // Always considered complete
+      default:
+        return false;
+    }
+  };
+
   // Reorder list items (experience, project, education, language, reference, etc.)
   const moveItem = (sectionType: string, index: number, direction: 'up' | 'down') => {
     const content = getSectionContent(sectionType);
@@ -697,48 +802,96 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
 
         {/* Editor Card with guided steps */}
         <Card className="border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-white shadow-sm p-0 rounded-xl">
-          {/* Horizontal Stepper Progress Indicator */}
-          <div className="bg-slate-50/80 backdrop-blur-sm border-b border-slate-100 px-6 py-4 flex items-center gap-2 overflow-x-auto shrink-0 select-none">
-            {WIZARD_STEPS.map((step, idx) => {
-              const Icon = step.icon;
-              const isCompleted = WIZARD_STEPS.findIndex(s => s.key === activeEditTab) > idx;
-              const isActive = activeEditTab === step.key;
-              
-              return (
-                <div key={step.id} className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => setActiveEditTab(step.key)}
-                    className={cn(
-                      "flex items-center gap-2 p-1.5 px-3 rounded-xl text-xs font-bold transition-all border outline-none",
-                      isActive 
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm scale-105" 
-                        : isCompleted 
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-250" 
-                          : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700"
+          {/* Horizontal Stepper Progress Indicator Container */}
+          <div className="relative group/stepper shrink-0 w-full overflow-hidden">
+            {/* Left Scroll Button */}
+            <button
+              type="button"
+              onClick={scrollLeftDirection}
+              className={cn(
+                "absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 shadow-md border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                canScrollLeft ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              )}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Left Gradient Fade Overlay */}
+            <div
+              className={cn(
+                "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-50 via-slate-50/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
+                canScrollLeft ? "opacity-100" : "opacity-0"
+              )}
+            />
+
+            {/* Scrollable Steps Wrapper */}
+            <div
+              ref={stepperRef}
+              className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth px-8 py-4 bg-slate-50/85 backdrop-blur-sm border-b border-slate-100 select-none"
+            >
+              {WIZARD_STEPS.map((step, idx) => {
+                const Icon = step.icon;
+                const isDone = isStepCompleted(step.key);
+                const isActive = activeEditTab === step.key;
+                
+                return (
+                  <div key={step.id} className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      data-step-key={step.key}
+                      onClick={() => setActiveEditTab(step.key)}
+                      className={cn(
+                        "flex items-center gap-2 p-1.5 px-3 rounded-xl text-xs font-bold transition-all border outline-none cursor-pointer",
+                        isActive 
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.02]" 
+                          : isDone 
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/50" 
+                            : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black border",
+                        isActive 
+                          ? "bg-white/20 border-white/30 text-white" 
+                          : isDone 
+                            ? "bg-emerald-100 border-emerald-200 text-emerald-800" 
+                            : "bg-slate-100 border-slate-200 text-slate-600"
+                      )}>
+                        {isDone ? '✓' : step.id}
+                      </span>
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span>{step.label}</span>
+                    </button>
+                    {idx < WIZARD_STEPS.length - 1 && (
+                      <div className={cn(
+                        "w-4 h-[2px] rounded-full shrink-0",
+                        isDone ? "bg-emerald-400" : "bg-slate-200"
+                      )} />
                     )}
-                  >
-                    <span className={cn(
-                      "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black border",
-                      isActive 
-                        ? "bg-white/20 border-white/30 text-white" 
-                        : isCompleted 
-                          ? "bg-emerald-100 border-emerald-200 text-emerald-800" 
-                          : "bg-slate-100 border-slate-200 text-slate-600"
-                    )}>
-                      {step.id}
-                    </span>
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span>{step.label}</span>
-                  </button>
-                  {idx < WIZARD_STEPS.length - 1 && (
-                    <div className={cn(
-                      "w-4 h-[2px] rounded-full shrink-0",
-                      isCompleted ? "bg-emerald-400" : "bg-slate-200"
-                    )} />
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Right Gradient Fade Overlay */}
+            <div
+              className={cn(
+                "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-50 via-slate-50/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
+                canScrollRight ? "opacity-100" : "opacity-0"
+              )}
+            />
+
+            {/* Right Scroll Button */}
+            <button
+              type="button"
+              onClick={scrollRightDirection}
+              className={cn(
+                "absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 shadow-md border border-slate-200/80 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                canScrollRight ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              )}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
           
           <div className="flex-1 p-6 overflow-y-auto h-full">
