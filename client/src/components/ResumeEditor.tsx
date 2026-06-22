@@ -759,42 +759,26 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         showLivePreview ? "lg:col-span-7" : "lg:col-span-12"
       )}>
         {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100 shrink-0">
-              <Sparkles className="w-4.5 h-4.5 text-emerald-600" />
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm shrink-0 overflow-hidden">
+          {/* Row 1: Title + Action Buttons */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-sm shadow-emerald-500/20 shrink-0">
+                <Sparkles className="w-4.5 h-4.5 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-800 text-sm leading-tight">Resume Editor</h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Auto-saved
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-[10px] font-medium text-slate-400">Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1}/{WIZARD_STEPS.length}</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="font-bold text-slate-800 text-sm">Resume Builder Editor</h2>
-              <p className="text-[10px] text-slate-500 font-medium">Progress saved automatically</p>
-            </div>
-          </div>
-          
-          {/* Quick Layout Controls on Header */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1 px-2.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Layout:</span>
-              <span className="text-[11px] font-extrabold text-slate-700">Exclusive ATS (Emerald)</span>
-            </div>
-            
             <div className="flex items-center gap-1.5">
-              <Label htmlFor="quick-job-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Target Job:</Label>
-              <Select value={selectedJob} onValueChange={(v) => {
-                setSelectedJob(v);
-                updateResumeData({ ...localResume, jobDescriptionId: v });
-              }}>
-                <SelectTrigger id="quick-job-select" className="h-8 text-xs font-semibold rounded-lg border-slate-200 bg-white min-w-[140px] max-w-[180px]">
-                  <SelectValue placeholder="Select target..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESET_JOBS.map(j => (
-                    <SelectItem key={j.id} value={j.id} className="text-xs">{j.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex gap-1">
               <Button 
                 variant="outline" 
                 size="icon" 
@@ -813,6 +797,29 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 rounded-lg" onClick={handleRedo} disabled={historyIndex >= history.length - 1} title="Redo">
                 <Redo className="w-3.5 h-3.5 text-slate-600" />
               </Button>
+            </div>
+          </div>
+          {/* Row 2: Layout + Target Job */}
+          <div className="flex flex-wrap items-center gap-3 px-5 py-2.5 bg-slate-50/60">
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg py-1 px-2.5 shadow-xs">
+              <Settings className="w-3 h-3 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-700">Exclusive ATS (Emerald)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Target:</span>
+              <Select value={selectedJob} onValueChange={(v) => {
+                setSelectedJob(v);
+                updateResumeData({ ...localResume, jobDescriptionId: v });
+              }}>
+                <SelectTrigger id="quick-job-select" className="h-7 text-[11px] font-semibold rounded-lg border-slate-200 bg-white min-w-[130px] max-w-[200px] shadow-xs">
+                  <SelectValue placeholder="Select target job..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_JOBS.map(j => (
+                    <SelectItem key={j.id} value={j.id} className="text-xs">{j.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -911,52 +918,65 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </button>
           </div>
           
-          <div className="flex-1 p-6 overflow-y-auto h-full">
+          <div className="flex-1 px-6 py-5 overflow-y-auto h-full">
             <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full h-full">
 
 
                 {/* HEADER TAB */}
-                <TabsContent value="header" className="space-y-4">
-                  <h3 className="font-bold text-slate-800 text-base">Header Contact Info</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-name">Full Name</Label>
+                <TabsContent value="header" className="space-y-5">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <User className="w-4.5 h-4.5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Contact Information</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Your name, title, and contact details that appear at the top of your resume.</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-name" className="text-xs font-semibold text-slate-600">Full Name <span className="text-red-400">*</span></Label>
                       <Input
                         id="edit-name"
+                        placeholder="e.g. John Doe"
+                        className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500 text-sm"
                         value={getSectionContent('header').header?.name || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, name: e.target.value }
                         })}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-jobtitle">Job Title</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-jobtitle" className="text-xs font-semibold text-slate-600">Job Title</Label>
                       <Input
                         id="edit-jobtitle"
-                        placeholder="Current or most recent role"
+                        placeholder="e.g. Full-Stack Developer"
+                        className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500 text-sm"
                         value={getSectionContent('header').header?.jobTitle || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, jobTitle: e.target.value }
                         })}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-targetrole">Target Role</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-targetrole" className="text-xs font-semibold text-slate-600">Target Role</Label>
                       <Input
                         id="edit-targetrole"
-                        placeholder="Role you are targeting (auto-detected from resume)"
+                        placeholder="e.g. Senior Software Engineer"
+                        className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500 text-sm"
                         value={getSectionContent('header').header?.targetRole || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, targetRole: e.target.value }
                         })}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-email">Email Address</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-email" className="text-xs font-semibold text-slate-600">Email Address <span className="text-red-400">*</span></Label>
                       <Input
                         id="edit-email"
                         type="email"
-                        className={cn(!isValidEmail(getSectionContent('header').header?.email) && "border-red-500 focus-visible:ring-red-500")}
+                        placeholder="you@email.com"
+                        className={cn("h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500 text-sm", !isValidEmail(getSectionContent('header').header?.email) && "border-red-500 focus-visible:ring-red-500")}
                         value={getSectionContent('header').header?.email || ''}
                         onChange={(e) => updateSection('header', {
                           header: { ...getSectionContent('header').header, email: e.target.value }
@@ -992,8 +1012,11 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-4 space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-800">Social & Website Profiles</h4>
+                  <div className="border-t border-slate-100 pt-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-indigo-500" />
+                      <h4 className="text-sm font-bold text-slate-700">Social & Website Profiles</h4>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-1">
                         <Label htmlFor="edit-linkedin">LinkedIn URL</Label>
@@ -1090,13 +1113,19 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* SUMMARY TAB */}
-                <TabsContent value="summary" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Professional Summary</h3>
+                <TabsContent value="summary" className="space-y-5">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-9 h-9 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <AlignLeft className="w-4.5 h-4.5 text-violet-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Professional Summary</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">A brief paragraph highlighting your career goals, key skills, and achievements.</p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <Label htmlFor="edit-summary" className="text-slate-700 font-semibold">Profile Description</Label>
+                      <Label htmlFor="edit-summary" className="text-xs font-semibold text-slate-600">Profile Description</Label>
                       <Button
                         variant="outline"
                         size="sm"
@@ -1129,20 +1158,29 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* SKILLS TAB */}
-                <TabsContent value="skills" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Skills Categories</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="skills" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Code className="w-4.5 h-4.5 text-amber-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Skills & Technologies</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Group your skills by category for ATS scanners and hiring managers.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('skills').skills || [];
                       updateSection('skills', { skills: [...cur, { category: '', skills: [] }] });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Category
                     </Button>
                   </div>
 
                   <div className="space-y-3">
                     {(getSectionContent('skills').skills || []).map((group: any, idx: number) => (
-                      <div key={idx} className="border border-slate-100 p-4 rounded-lg space-y-2 bg-slate-50">
+                      <div key={idx} className="border border-slate-200/80 p-4 rounded-xl space-y-3 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
                           <Input
                             placeholder="e.g. Languages"
@@ -1176,24 +1214,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* EXPERIENCE TAB */}
-                <TabsContent value="experience" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Work History</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="experience" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Briefcase className="w-4.5 h-4.5 text-sky-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Work Experience</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">List your roles in reverse chronological order. Include measurable achievements.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('experience').experiences || [];
                       updateSection('experience', {
                         experiences: [...cur, { id: nanoid(), company: '', role: '', startDate: '', endDate: '', current: false, description: [] }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Position
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('experience').experiences || []).map((exp: any, idx: number) => (
-                      <div key={exp.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={exp.id || idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Job Position #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Briefcase className="w-3 h-3 text-slate-400" />Position {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1224,9 +1271,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Company Name</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-600">Company Name</Label>
                             <Input
                               value={exp.company}
                               onChange={(e) => {
@@ -1236,8 +1283,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               }}
                             />
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Job Title</Label>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-600">Job Title</Label>
                             <Input
                               value={exp.role}
                               onChange={(e) => {
@@ -1247,8 +1294,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               }}
                             />
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Start Date</Label>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-600">Start Date</Label>
                             <Input
                               value={exp.startDate}
                               onChange={(e) => {
@@ -1258,8 +1305,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               }}
                             />
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">End Date</Label>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-600">End Date</Label>
                             <Input
                               value={exp.endDate}
                               disabled={exp.current}
@@ -1326,24 +1373,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* PROJECTS TAB */}
-                <TabsContent value="projects" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Projects</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="projects" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Folder className="w-4.5 h-4.5 text-rose-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Projects</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Showcase personal, open-source, or freelance projects with technologies used.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('projects').projects || [];
                       updateSection('projects', {
                         projects: [...cur, { id: nanoid(), name: '', description: '', technologies: [], link: '', date: '' }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Project
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('projects').projects || []).map((proj: any, idx: number) => (
-                      <div key={proj.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={proj.id || idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Project #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Folder className="w-3 h-3 text-slate-400" />Project {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1374,9 +1430,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Project Name</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-600">Project Name</Label>
                             <Input
                               value={proj.name}
                               onChange={(e) => {
@@ -1443,24 +1499,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* EDUCATION TAB */}
-                <TabsContent value="education" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Education Background</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="education" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <GraduationCap className="w-4.5 h-4.5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Education</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Your academic background including degrees, institutions, and graduation dates.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('education').educations || [];
                       updateSection('education', {
                         educations: [...cur, { id: nanoid(), institution: '', degree: '', field: '', graduationDate: '', gpa: '' }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Education
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('education').educations || []).map((edu: any, idx: number) => (
-                      <div key={edu.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={edu.id || idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Education #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><GraduationCap className="w-3 h-3 text-slate-400" />Education {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1554,24 +1619,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* CERTIFICATIONS TAB */}
-                <TabsContent value="certifications" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Certifications</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="certifications" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Award className="w-4.5 h-4.5 text-orange-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Certifications & Credentials</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Professional certifications, licenses, or credentials you have earned.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('certifications').certifications || [];
                       updateSection('certifications', {
                         certifications: [...cur, { id: nanoid(), name: '', issuer: '', date: '', link: '' }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Certification
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('certifications').certifications || []).map((cert: any, idx: number) => (
-                      <div key={cert.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={cert.id || idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Certification #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Award className="w-3 h-3 text-slate-400" />Certification {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1658,24 +1732,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* LANGUAGES TAB */}
-                <TabsContent value="languages" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Languages Spoken</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="languages" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Globe className="w-4.5 h-4.5 text-teal-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Languages</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Languages you speak and your proficiency level in each.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('languages').languages || [];
                       updateSection('languages', {
                         languages: [...cur, { language: '', proficiency: '' }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Language
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('languages').languages || []).map((lang: any, idx: number) => (
-                      <div key={idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Language #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Globe className="w-3 h-3 text-slate-400" />Language {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1741,24 +1824,33 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* REFERENCES TAB */}
-                <TabsContent value="references" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Professional References</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="references" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Users className="w-4.5 h-4.5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Professional References</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">People who can vouch for your work quality and character.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('references').references || [];
                       updateSection('references', {
                         references: [...cur, { id: nanoid(), name: '', company: '', title: '', email: '', phone: '', availableOnRequest: false }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Reference
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     {(getSectionContent('references').references || []).map((ref: any, idx: number) => (
-                      <div key={ref.id || idx} className="border border-slate-100 p-4 rounded-lg space-y-3 bg-slate-50">
+                      <div key={ref.id || idx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500">Reference #{idx + 1}</span>
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Users className="w-3 h-3 text-slate-400" />Reference {idx + 1}</span>
                           <div className="flex items-center gap-1">
                             <Button 
                               variant="ghost" 
@@ -1888,22 +1980,31 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* CUSTOM SECTIONS TAB */}
-                <TabsContent value="custom" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Custom Sections</h3>
-                    <Button variant="outline" size="sm" onClick={() => {
+                <TabsContent value="custom" className="space-y-5">
+                  <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-pink-50 border border-pink-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <LayoutList className="w-4.5 h-4.5 text-pink-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Custom Sections</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Add volunteer work, patents, publications, or any other section.</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5 h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 rounded-lg" onClick={() => {
                       const cur = getSectionContent('custom').customSections || [];
                       updateSection('custom', {
                         customSections: [...cur, { id: nanoid(), title: '', items: [] }]
                       });
                     }}>
+                      <Plus className="w-3.5 h-3.5" />
                       Add Custom Section
                     </Button>
                   </div>
 
                   <div className="space-y-6">
                     {(getSectionContent('custom').customSections || []).map((sect: any, sectIdx: number) => (
-                      <div key={sect.id || sectIdx} className="border border-slate-200 p-4 rounded-lg space-y-4 bg-slate-50/50">
+                      <div key={sect.id || sectIdx} className="border border-slate-200/80 p-5 rounded-xl space-y-4 bg-gradient-to-r from-slate-50/80 to-white hover:border-slate-300/80 transition-colors">
                         <div className="flex justify-between items-center gap-3">
                           <div className="flex-1 max-w-sm">
                             <Label className="text-xs font-bold text-slate-500">Section Title *</Label>
@@ -2071,10 +2172,15 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* LAYOUT TAB */}
-                <TabsContent value="layout" className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-base font-medium">Section Order & Visibility</h3>
-                    <p className="text-xs text-slate-500">Arrange and show/hide resume sections</p>
+                <TabsContent value="layout" className="space-y-5">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <Settings className="w-4.5 h-4.5 text-slate-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-[15px] leading-tight">Section Order & Visibility</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Drag to reorder sections and toggle visibility on your resume.</p>
+                    </div>
                   </div>
                   <div className="space-y-2 border border-slate-250 rounded-xl p-4 bg-slate-50/50">
                     {[...localResume.sections].sort((a, b) => a.order - b.order).map((sec, idx, sortedList) => (
@@ -2235,38 +2341,75 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           </div>
           
           {/* Wizard Navigation Footer */}
-          <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-between items-center shrink-0">
-            <Button
-              variant="outline"
-              disabled={activeEditTab === 'header'}
-              onClick={() => {
-                const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
-                if (curIdx > 0) {
-                  setActiveEditTab(WIZARD_STEPS[curIdx - 1].key);
-                }
-              }}
-              className="border-slate-200 text-slate-700 hover:bg-slate-100 font-bold px-5 h-10 rounded-xl"
-            >
-              Back
-            </Button>
-            
-            <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-              Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1} of {WIZARD_STEPS.length}
+          <div className="shrink-0 border-t border-slate-100">
+            {/* Mini progress bar */}
+            <div className="h-0.5 bg-slate-100">
+              <div 
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500 ease-out rounded-r-full" 
+                style={{ width: `${((WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1) / WIZARD_STEPS.length) * 100}%` }} 
+              />
             </div>
+            <div className="bg-white/80 backdrop-blur-sm px-5 py-3 flex justify-between items-center">
+              <Button
+                variant="outline"
+                disabled={activeEditTab === 'header'}
+                onClick={() => {
+                  const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
+                  if (curIdx > 0) {
+                    setActiveEditTab(WIZARD_STEPS[curIdx - 1].key);
+                  }
+                }}
+                className="border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold gap-1.5 px-4 h-9 rounded-lg text-xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Back
+              </Button>
+              
+              <div className="flex items-center gap-1.5">
+                {WIZARD_STEPS.map((step, idx) => (
+                  <div 
+                    key={step.id}
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                      activeEditTab === step.key 
+                        ? "w-4 bg-emerald-500" 
+                        : isStepCompleted(step.key) 
+                          ? "bg-emerald-300" 
+                          : "bg-slate-200"
+                    )}
+                  />
+                ))}
+              </div>
 
-            <Button
-              onClick={() => {
-                const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
-                if (curIdx < WIZARD_STEPS.length - 1) {
-                  setActiveEditTab(WIZARD_STEPS[curIdx + 1].key);
-                } else {
-                  setShowDownloadModal(true);
-                }
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 h-10 rounded-xl"
-            >
-              {activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key ? 'Finish & Export' : 'Next Step'}
-            </Button>
+              <Button
+                onClick={() => {
+                  const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
+                  if (curIdx < WIZARD_STEPS.length - 1) {
+                    setActiveEditTab(WIZARD_STEPS[curIdx + 1].key);
+                  } else {
+                    setShowDownloadModal(true);
+                  }
+                }}
+                className={cn(
+                  "font-semibold gap-1.5 px-4 h-9 rounded-lg text-xs shadow-sm transition-all",
+                  activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key 
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/20" 
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                )}
+              >
+                {activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key ? (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Finish & Export
+                  </>
+                ) : (
+                  <>
+                    Next Step
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </Card>
       </div>
