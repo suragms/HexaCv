@@ -12,14 +12,16 @@ import CountryLocationFields from './CountryLocationFields';
 
 interface ResumeScratchBuilderProps {
   onComplete: (data: any) => void;
+  prefilledRole?: string;
+  prefilledCountryCode?: string;
 }
 
-export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilderProps) {
+export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefilledCountryCode }: ResumeScratchBuilderProps) {
   const [currentStep, setCurrentStep] = useState<'header' | 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements' | 'languages' | 'references' | 'custom' | 'review'>('header');
 
   const [header, setHeader] = useState({
     name: '',
-    jobTitle: '',
+    jobTitle: prefilledRole || '',
     email: '',
     phone: '',
     location: '',
@@ -27,7 +29,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
     github: '',
     portfolio: '',
     countryCode: '',
-    targetCountryCode: '',
+    targetCountryCode: prefilledCountryCode || '',
     locationFields: {} as Record<string, string>,
   });
 
@@ -222,10 +224,10 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start text-slate-800 dark:text-slate-200">
       {/* Desktop Sidebar Stepper */}
-      <div className="hidden md:flex md:col-span-3 lg:col-span-3 flex-col gap-1.5 border-r border-slate-200/80 pr-6 sticky top-24">
-        <h3 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest pl-4 mb-2">Resume Steps</h3>
+      <div className="hidden md:flex md:col-span-3 lg:col-span-3 flex-col gap-1.5 border-r border-slate-200 dark:border-white/10 pr-6 sticky top-24">
+        <h3 className="text-[10px] font-extrabold text-slate-500 dark:text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-4 mb-2">Resume Steps</h3>
         {steps.map((step, index) => {
           const isActive = currentStep === step.id;
           const isDone = isStepCompleted(step.id);
@@ -236,15 +238,15 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 isActive 
                   ? 'bg-gradient-to-r from-blue-600 to-indigo-650 text-white font-bold shadow-md shadow-blue-500/10 scale-[1.02]' 
-                  : 'text-slate-600 hover:bg-slate-100/60 hover:text-slate-900'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/50 dark:bg-white/5 hover:text-white'
               }`}
             >
               <span className={`text-xs flex items-center justify-center w-6 h-6 rounded-lg font-bold shrink-0 ${
                 isActive 
                   ? 'bg-white/20 text-white' 
                   : isDone 
-                    ? 'bg-emerald-100 text-emerald-600' 
-                    : 'bg-slate-100 text-slate-500'
+                    ? 'bg-blue-950/60 text-blue-300 border border-blue-500/20' 
+                    : 'bg-slate-50/50 dark:bg-white/5 text-slate-500 dark:text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10'
               }`}>
                 {isDone ? '✓' : step.icon}
               </span>
@@ -258,12 +260,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
       </div>
 
       {/* Mobile Stepper Progress */}
-      <div className="md:hidden bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3.5 w-full">
-        <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+      <div className="md:hidden bg-slate-900/40 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-sm space-y-3.5 w-full backdrop-blur-sm">
+        <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider">
           <span>Step {steps.findIndex(s => s.id === currentStep) + 1} of {steps.length}: {steps.find(s => s.id === currentStep)?.label}</span>
-          <span className="text-blue-600">{Math.round(((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100)}%</span>
+          <span className="text-blue-400">{Math.round(((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100)}%</span>
         </div>
-        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-slate-50/50 dark:bg-white/5 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500" 
             style={{ width: `${((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100}%` }}
@@ -282,8 +284,8 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                   isActive
                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/10'
                     : isDone
-                      ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      ? 'bg-blue-950/40 border-blue-500/20 text-blue-300'
+                      : 'bg-slate-50/50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'
                 }`}
               >
                 <span>{isDone ? '✓' : step.icon}</span>
@@ -296,12 +298,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
 
       {/* Form Content Area */}
       <div className="col-span-1 md:col-span-9 lg:col-span-9 space-y-6 w-full">
-        <Card className="border-slate-200 rounded-2xl shadow-sm bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/40 border-b border-slate-100 p-6">
-            <CardTitle className="text-lg font-bold text-slate-800">
+        <Card className="border-slate-200 dark:border-white/10 rounded-2xl shadow-sm bg-slate-50/50 dark:bg-white/5 overflow-hidden backdrop-blur-md">
+          <CardHeader className="bg-slate-100/50 dark:bg-slate-950/20 border-b border-slate-200 dark:border-white/10 p-6">
+            <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
               {steps.find((s) => s.id === currentStep)?.label}
             </CardTitle>
-            <CardDescription className="text-slate-500 text-xs mt-1">
+            <CardDescription className="text-slate-500 dark:text-slate-400 text-xs mt-1">
               {currentStep === 'header' && 'Provide your name, title, contact details, and social links.'}
               {currentStep === 'summary' && 'Write a compelling professional summary.'}
               {currentStep === 'skills' && 'Add categorized skills to make your resume keyword-rich.'}
@@ -322,34 +324,34 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-slide-up">
                   <div>
-                    <Label htmlFor="name" className="font-semibold text-slate-700 text-xs">Full Name *</Label>
+                    <Label htmlFor="name" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Full Name *</Label>
                     <Input
                       id="name"
                       placeholder="John Doe"
                       value={header.name}
                       onChange={(e) => setHeader({ ...header, name: e.target.value })}
-                      className="rounded-lg border-slate-200 mt-1"
+                      className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="jobTitle" className="font-semibold text-slate-700 text-xs">Job Title *</Label>
+                    <Label htmlFor="jobTitle" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Job Title *</Label>
                     <Input
                       id="jobTitle"
                       placeholder="Full Stack Engineer"
                       value={header.jobTitle}
                       onChange={(e) => setHeader({ ...header, jobTitle: e.target.value })}
-                      className="rounded-lg border-slate-200 mt-1"
+                      className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="email" className="font-semibold text-slate-700 text-xs">Email Address *</Label>
+                    <Label htmlFor="email" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Email Address *</Label>
                     <Input
                       id="email"
                       type="email"
                       placeholder="john@example.com"
                       value={header.email}
                       onChange={(e) => setHeader({ ...header, email: e.target.value })}
-                      className="rounded-lg border-slate-200 mt-1"
+                      className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-2">
@@ -368,37 +370,37 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 </div>
 
                 {/* Social links */}
-                <div className="border-t border-slate-100 pt-5 space-y-4 animate-fade-slide-up">
-                  <Label className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Social and Website Profiles</Label>
+                <div className="border-t border-slate-200 dark:border-white/10 pt-5 space-y-4 animate-fade-slide-up">
+                  <Label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-500 dark:text-slate-400">Social and Website Profiles</Label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="linkedin" className="font-semibold text-slate-700 text-xs">LinkedIn URL</Label>
+                      <Label htmlFor="linkedin" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">LinkedIn URL</Label>
                       <Input
                         id="linkedin"
                         placeholder="linkedin.com/in/username"
                         value={header.linkedin}
                         onChange={(e) => setHeader({ ...header, linkedin: e.target.value })}
-                        className="rounded-lg border-slate-200 mt-1"
+                        className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="github" className="font-semibold text-slate-700 text-xs">GitHub URL</Label>
+                      <Label htmlFor="github" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">GitHub URL</Label>
                       <Input
                         id="github"
                         placeholder="github.com/username"
                         value={header.github}
                         onChange={(e) => setHeader({ ...header, github: e.target.value })}
-                        className="rounded-lg border-slate-200 mt-1"
+                        className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="portfolio" className="font-semibold text-slate-700 text-xs">Portfolio URL</Label>
+                      <Label htmlFor="portfolio" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Portfolio URL</Label>
                       <Input
                         id="portfolio"
                         placeholder="yourportfolio.com"
                         value={header.portfolio}
                         onChange={(e) => setHeader({ ...header, portfolio: e.target.value })}
-                        className="rounded-lg border-slate-200 mt-1"
+                        className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                       />
                     </div>
                   </div>
@@ -409,14 +411,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {/* Summary Step */}
             {currentStep === 'summary' && (
               <div className="space-y-2 animate-fade-slide-up">
-                <Label htmlFor="summary" className="font-semibold text-slate-700 text-xs">Professional Summary</Label>
+                <Label htmlFor="summary" className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Professional Summary</Label>
                 <Textarea
                   id="summary"
                   placeholder="Detail your professional experience, major achievements, and core skills..."
                   value={summary}
                   onChange={(e) => setSummary(e.target.value)}
                   rows={7}
-                  className="rounded-xl border-slate-200 p-3 mt-1 leading-relaxed text-sm"
+                  className="rounded-xl border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 p-3 mt-1 leading-relaxed text-sm text-slate-800 dark:text-slate-200"
                 />
               </div>
             )}
@@ -425,12 +427,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'skills' && (
               <div className="space-y-4 animate-fade-slide-up">
                 {skills.map((skillGroup, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-slate-50/30 space-y-3 shadow-sm">
+                  <div key={idx} className="border border-slate-200 dark:border-white/10 rounded-xl p-4 bg-slate-50/50 dark:bg-white/5 space-y-3 shadow-sm">
                     <div className="flex justify-between items-center gap-3">
                       <Input
                         placeholder="Category (e.g. Frontend)"
                         value={skillGroup.category}
-                        className="max-w-xs font-bold text-slate-800 rounded-lg"
+                        className="max-w-xs font-bold text-slate-900 dark:text-slate-100 rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                         onChange={(e) => {
                           const newSkills = [...skills];
                           newSkills[idx].category = e.target.value;
@@ -441,7 +443,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                         variant="ghost"
                         size="icon"
                         onClick={() => setSkills(skills.filter((_, i) => i !== idx))}
-                        className="text-slate-400 hover:text-red-500 rounded-lg h-8 w-8 hover:bg-red-50"
+                        className="text-slate-500 dark:text-slate-400 hover:text-red-400 rounded-lg h-8 w-8 hover:bg-red-500/10 border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -455,14 +457,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                         setSkills(newSkills);
                       }}
                       rows={2}
-                      className="rounded-lg border-slate-200 text-sm leading-relaxed"
+                      className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-sm leading-relaxed text-slate-800 dark:text-slate-200"
                     />
                   </div>
                 ))}
                 <Button
                   variant="outline"
                   onClick={() => setSkills([...skills, { category: '', skills: [] }])}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200"
                 >
                   <Plus className="w-4 h-4" />
                   Add Skill Category
@@ -474,21 +476,21 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'experience' && (
               <div className="space-y-5 animate-fade-slide-up">
                 {experiences.map((exp, idx) => (
-                  <div key={exp.id} className="border border-slate-200 rounded-xl p-5 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={exp.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-5 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Experience #{idx + 1}</span>
+                      <span className="font-bold text-slate-600 dark:text-slate-350 text-sm">Experience #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setExperiences(experiences.filter((e) => e.id !== exp.id))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2.5 h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2.5 h-8 border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                       >
                         <Trash2 className="w-4 h-4 mr-1.5 inline" /> Delete Position
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Company Name *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Company Name *</Label>
                         <Input
                           placeholder="Company"
                           value={exp.company}
@@ -497,11 +499,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newExp[idx].company = e.target.value;
                             setExperiences(newExp);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Role / Designation *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Role / Designation *</Label>
                         <Input
                           placeholder="e.g. Software Engineer"
                           value={exp.role}
@@ -510,11 +512,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newExp[idx].role = e.target.value;
                             setExperiences(newExp);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Start Date *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Start Date *</Label>
                         <Input
                           placeholder="Jan 2022"
                           value={exp.startDate}
@@ -523,11 +525,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newExp[idx].startDate = e.target.value;
                             setExperiences(newExp);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">End Date</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">End Date</Label>
                         <Input
                           placeholder="Present"
                           value={exp.endDate}
@@ -537,7 +539,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newExp[idx].endDate = e.target.value;
                             setExperiences(newExp);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                         />
                       </div>
                     </div>
@@ -552,12 +554,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                           if (e.target.checked) newExp[idx].endDate = 'Present';
                           setExperiences(newExp);
                         }}
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                        className="w-4 h-4 rounded text-blue-650 focus:ring-blue-500 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                       />
-                      <label htmlFor={`current-${exp.id}`} className="text-xs font-semibold text-slate-700">Currently work here</label>
+                      <label htmlFor={`current-${exp.id}`} className="text-xs font-semibold text-slate-700 dark:text-slate-300">Currently work here</label>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="font-semibold text-slate-705 text-xs">Key Responsibilities (one per line)</Label>
+                      <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Key Responsibilities (one per line)</Label>
                       <Textarea
                         placeholder="Designed and developed key SaaS dashboard modules&#10;Integrated third-party APIs using Express"
                         value={exp.description.join('\n')}
@@ -567,7 +569,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                           setExperiences(newExp);
                         }}
                         rows={3.5}
-                        className="rounded-lg border-slate-200 text-xs leading-relaxed"
+                        className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs leading-relaxed text-slate-250"
                       />
                     </div>
                   </div>
@@ -575,7 +577,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddExperience}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200"
                 >
                   <Plus className="w-4 h-4" />
                   Add Professional Experience
@@ -587,21 +589,21 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'projects' && (
               <div className="space-y-5 animate-fade-slide-up">
                 {projects.map((proj, idx) => (
-                  <div key={proj.id} className="border border-slate-200 rounded-xl p-5 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={proj.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-5 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Project #{idx + 1}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Project #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setProjects(projects.filter((p) => p.id !== proj.id))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2.5 h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2.5 h-8"
                       >
                         <Trash2 className="w-4 h-4 mr-1.5 inline" /> Delete Project
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Project Name *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Project Name *</Label>
                         <Input
                           placeholder="My Project"
                           value={proj.name}
@@ -610,11 +612,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newProj[idx].name = e.target.value;
                             setProjects(newProj);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Date / Duration</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Date / Duration</Label>
                         <Input
                           placeholder="e.g. March 2025"
                           value={proj.date}
@@ -623,11 +625,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newProj[idx].date = e.target.value;
                             setProjects(newProj);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Technologies Used (comma-separated)</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Technologies Used (comma-separated)</Label>
                         <Input
                           placeholder="React, Tailwind, Node.js"
                           value={proj.technologies.join(', ')}
@@ -636,11 +638,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newProj[idx].technologies = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
                             setProjects(newProj);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Project URL</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Project URL</Label>
                         <Input
                           placeholder="https://github.com/..."
                           value={proj.link}
@@ -649,12 +651,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newProj[idx].link = e.target.value;
                             setProjects(newProj);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="font-semibold text-slate-705 text-xs">Project Description</Label>
+                      <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Project Description</Label>
                       <Textarea
                         placeholder="Detail what you built, technical challenges, and outcomes..."
                         value={proj.description}
@@ -664,7 +666,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                           setProjects(newProj);
                         }}
                         rows={3.5}
-                        className="rounded-lg border-slate-200 text-xs leading-relaxed"
+                        className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs leading-relaxed"
                       />
                     </div>
                   </div>
@@ -672,7 +674,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddProject}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add Project Detail
@@ -684,21 +686,21 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'education' && (
               <div className="space-y-5 animate-fade-slide-up">
                 {educations.map((edu, idx) => (
-                  <div key={edu.id} className="border border-slate-200 rounded-xl p-5 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={edu.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-5 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Education #{idx + 1}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Education #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setEducations(educations.filter((e) => e.id !== edu.id))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2.5 h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2.5 h-8"
                       >
                         <Trash2 className="w-4 h-4 mr-1.5 inline" /> Delete Record
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Institution / College *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Institution / College *</Label>
                         <Input
                           placeholder="State University"
                           value={edu.institution}
@@ -707,11 +709,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newEdu[idx].institution = e.target.value;
                             setEducations(newEdu);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Degree *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Degree *</Label>
                         <Input
                           placeholder="Bachelor of Science"
                           value={edu.degree}
@@ -720,11 +722,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newEdu[idx].degree = e.target.value;
                             setEducations(newEdu);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Field of Study *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Field of Study *</Label>
                         <Input
                           placeholder="Computer Science"
                           value={edu.field}
@@ -733,11 +735,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newEdu[idx].field = e.target.value;
                             setEducations(newEdu);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Graduation Date</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Graduation Date</Label>
                         <Input
                           placeholder="e.g. May 2023"
                           value={edu.graduationDate}
@@ -746,11 +748,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newEdu[idx].graduationDate = e.target.value;
                             setEducations(newEdu);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">GPA (optional)</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">GPA (optional)</Label>
                         <Input
                           placeholder="e.g. 3.8/4.0"
                           value={edu.gpa}
@@ -759,7 +761,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newEdu[idx].gpa = e.target.value;
                             setEducations(newEdu);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                     </div>
@@ -768,7 +770,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddEducation}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add Education Background
@@ -780,21 +782,21 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'certifications' && (
               <div className="space-y-5 animate-fade-slide-up">
                 {certifications.map((cert, idx) => (
-                  <div key={cert.id} className="border border-slate-200 rounded-xl p-5 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={cert.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-5 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Certification #{idx + 1}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Certification #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setCertifications(certifications.filter((c) => c.id !== cert.id))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2.5 h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2.5 h-8"
                       >
                         <Trash2 className="w-4 h-4 mr-1.5 inline" /> Delete Certification
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Certification Name *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Certification Name *</Label>
                         <Input
                           placeholder="AWS Solutions Architect"
                           value={cert.name}
@@ -803,11 +805,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newCert[idx].name = e.target.value;
                             setCertifications(newCert);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Issuing Organization *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Issuing Organization *</Label>
                         <Input
                           placeholder="Amazon Web Services"
                           value={cert.issuer}
@@ -816,11 +818,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newCert[idx].issuer = e.target.value;
                             setCertifications(newCert);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Issue Date</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Issue Date</Label>
                         <Input
                           placeholder="e.g. Aug 2024"
                           value={cert.date}
@@ -829,11 +831,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newCert[idx].date = e.target.value;
                             setCertifications(newCert);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Credential URL</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Credential URL</Label>
                         <Input
                           placeholder="https://..."
                           value={cert.link}
@@ -842,7 +844,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newCert[idx].link = e.target.value;
                             setCertifications(newCert);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                     </div>
@@ -851,7 +853,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddCertification}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add Certification
@@ -862,13 +864,13 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {/* Achievements Step */}
             {currentStep === 'achievements' && (
               <div className="space-y-4 animate-fade-slide-up">
-                <Label className="font-semibold text-slate-700 text-xs">Achievements (add major milestones and quantified successes)</Label>
+                <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Achievements (add major milestones and quantified successes)</Label>
                 <div className="flex gap-2 mt-1">
                   <Input
                     value={achievementInput}
                     onChange={(e) => setAchievementInput(e.target.value)}
                     placeholder="e.g., Increased system performance by 40% using memory caching."
-                    className="rounded-lg border-slate-200"
+                    className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                   />
                   <Button
                     type="button"
@@ -885,13 +887,13 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 </div>
                 <ul className="space-y-2 mt-4">
                   {achievements.map((ach, idx) => (
-                    <li key={idx} className="flex justify-between items-center bg-slate-50/50 border border-slate-200 p-2.5 rounded-lg text-sm text-slate-800 shadow-sm">
+                    <li key={idx} className="flex justify-between items-center bg-slate-50/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-2.5 rounded-lg text-sm text-slate-700 dark:text-slate-300 shadow-sm">
                       <span>{ach}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setAchievements(achievements.filter((_, i) => i !== idx))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2 h-7"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg px-2 h-7"
                       >
                         Delete
                       </Button>
@@ -905,21 +907,21 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'languages' && (
               <div className="space-y-4 animate-fade-slide-up">
                 {languages.map((lang, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={idx} className="border border-slate-200 dark:border-white/10 rounded-xl p-4 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Language #{idx + 1}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Language #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setLanguages(languages.filter((_, i) => i !== idx))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg h-8"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Language *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Language *</Label>
                         <Input
                           placeholder="e.g. Spanish"
                           value={lang.language}
@@ -928,11 +930,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newLangs[idx].language = e.target.value;
                             setLanguages(newLangs);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                       <div>
-                        <Label className="font-semibold text-slate-705 text-xs">Proficiency *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Proficiency *</Label>
                         <Input
                           placeholder="e.g. Native, Fluent, Conversational"
                           value={lang.proficiency}
@@ -941,7 +943,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                             newLangs[idx].proficiency = e.target.value;
                             setLanguages(newLangs);
                           }}
-                          className="rounded-lg border-slate-200 mt-1"
+                          className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                         />
                       </div>
                     </div>
@@ -950,7 +952,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddLanguage}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add Language
@@ -962,14 +964,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'references' && (
               <div className="space-y-4 animate-fade-slide-up">
                 {references.map((ref, idx) => (
-                  <div key={ref.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/20 space-y-4 shadow-sm">
+                  <div key={ref.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-4 bg-slate-50/50 dark:bg-white/5 space-y-4 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 text-sm">Reference #{idx + 1}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Reference #{idx + 1}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setReferences(references.filter((r) => r.id !== ref.id))}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg h-8"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg h-8"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -984,14 +986,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                           newRefs[idx].availableOnRequest = e.target.checked;
                           setReferences(newRefs);
                         }}
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                        className="w-4 h-4 rounded text-blue-650 focus:ring-blue-500 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                       />
-                      <label htmlFor={`available-${ref.id}`} className="text-xs font-semibold text-slate-700">Available on request</label>
+                      <label htmlFor={`available-${ref.id}`} className="text-xs font-semibold text-slate-700 dark:text-slate-300">Available on request</label>
                     </div>
                     {!ref.availableOnRequest && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <Label className="font-semibold text-slate-705 text-xs">Name *</Label>
+                          <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Name *</Label>
                           <Input
                             placeholder="e.g. Jane Doe"
                             value={ref.name}
@@ -1000,11 +1002,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                               newRefs[idx].name = e.target.value;
                               setReferences(newRefs);
                             }}
-                            className="rounded-lg border-slate-200 mt-1"
+                            className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                           />
                         </div>
                         <div>
-                          <Label className="font-semibold text-slate-705 text-xs">Company</Label>
+                          <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Company</Label>
                           <Input
                             placeholder="e.g. Acme Corp"
                             value={ref.company}
@@ -1013,11 +1015,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                               newRefs[idx].company = e.target.value;
                               setReferences(newRefs);
                             }}
-                            className="rounded-lg border-slate-200 mt-1"
+                            className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                           />
                         </div>
                         <div>
-                          <Label className="font-semibold text-slate-705 text-xs">Title / Position</Label>
+                          <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Title / Position</Label>
                           <Input
                             placeholder="e.g. Engineering Manager"
                             value={ref.title}
@@ -1026,11 +1028,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                               newRefs[idx].title = e.target.value;
                               setReferences(newRefs);
                             }}
-                            className="rounded-lg border-slate-200 mt-1"
+                            className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                           />
                         </div>
                         <div>
-                          <Label className="font-semibold text-slate-705 text-xs">Email</Label>
+                          <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Email</Label>
                           <Input
                             type="email"
                             placeholder="jane.doe@example.com"
@@ -1040,11 +1042,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                               newRefs[idx].email = e.target.value;
                               setReferences(newRefs);
                             }}
-                            className="rounded-lg border-slate-200 mt-1"
+                            className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                           />
                         </div>
                         <div>
-                          <Label className="font-semibold text-slate-705 text-xs">Phone</Label>
+                          <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Phone</Label>
                           <Input
                             placeholder="e.g. +1 (555) 019-2834"
                             value={ref.phone}
@@ -1053,7 +1055,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                               newRefs[idx].phone = e.target.value;
                               setReferences(newRefs);
                             }}
-                            className="rounded-lg border-slate-200 mt-1"
+                            className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1"
                           />
                         </div>
                       </div>
@@ -1063,7 +1065,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddReference}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add Reference
@@ -1075,14 +1077,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {currentStep === 'custom' && (
               <div className="space-y-6 animate-fade-slide-up">
                 {customSections.map((sect, sectIdx) => (
-                  <div key={sect.id} className="border border-slate-200 rounded-xl p-5 space-y-4 bg-slate-50/10 shadow-sm">
+                  <div key={sect.id} className="border border-slate-200 dark:border-white/10 rounded-xl p-5 space-y-4 bg-slate-50/50 dark:bg-white/5 shadow-sm">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                       <div className="w-full sm:w-2/3">
-                        <Label className="font-semibold text-slate-705 text-xs uppercase tracking-wider">Section Title *</Label>
+                        <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider">Section Title *</Label>
                         <Input
                           placeholder="e.g. Volunteer Work, Publications"
                           value={sect.title}
-                          className="font-bold text-slate-800 rounded-lg mt-1"
+                          className="font-bold text-slate-900 dark:text-slate-100 rounded-lg mt-1 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                           onChange={(e) => {
                             const list = [...customSections];
                             list[sectIdx].title = e.target.value;
@@ -1094,18 +1096,18 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                         variant="ghost"
                         size="sm"
                         onClick={() => setCustomSections(customSections.filter((s) => s.id !== sect.id))}
-                        className="text-red-500 hover:text-red-750 hover:bg-red-50 rounded-lg h-9 mt-4 sm:mt-6 px-3"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg h-9 mt-4 sm:mt-6 px-3 border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                       >
                         <Trash2 className="w-4 h-4 mr-1.5 inline" /> Delete Section
                       </Button>
                     </div>
 
                     <div className="space-y-4 pt-2">
-                      <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Items in Section</Label>
+                      <Label className="text-xs font-bold text-slate-500 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider">Items in Section</Label>
                       {sect.items.map((item: any, itemIdx: number) => (
-                        <div key={item.id} className="border border-slate-200 bg-white rounded-xl p-4 space-y-3 shadow-sm">
+                        <div key={item.id} className="border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 rounded-xl p-4 space-y-3 shadow-sm">
                           <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-400">Item #{itemIdx + 1}</span>
+                            <span className="text-xs font-bold text-slate-405">Item #{itemIdx + 1}</span>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1114,14 +1116,14 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                                 list[sectIdx].items = list[sectIdx].items.filter((i: any) => i.id !== item.id);
                                 setCustomSections(list);
                               }}
-                              className="text-red-400 hover:text-red-650 h-7 w-7 rounded-lg hover:bg-red-50"
+                              className="text-red-400 hover:text-red-300 h-7 w-7 rounded-lg hover:bg-red-500/10 border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                              <Label className="font-semibold text-slate-700 text-xs">Item Title *</Label>
+                              <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Item Title *</Label>
                               <Input
                                 placeholder="e.g. Volunteer Coordinator"
                                 value={item.title}
@@ -1130,11 +1132,11 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                                   list[sectIdx].items[itemIdx].title = e.target.value;
                                   setCustomSections(list);
                                 }}
-                                className="rounded-lg border-slate-200 mt-1"
+                                className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                               />
                             </div>
                             <div>
-                              <Label className="font-semibold text-slate-700 text-xs">Subtitle / Organization</Label>
+                              <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Subtitle / Organization</Label>
                               <Input
                                 placeholder="e.g. Red Cross"
                                 value={item.subtitle}
@@ -1143,12 +1145,12 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                                   list[sectIdx].items[itemIdx].subtitle = e.target.value;
                                   setCustomSections(list);
                                 }}
-                                className="rounded-lg border-slate-200 mt-1"
+                                className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 mt-1 text-slate-800 dark:text-slate-200"
                               />
                             </div>
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="font-semibold text-slate-700 text-xs">Description</Label>
+                            <Label className="font-semibold text-slate-700 dark:text-slate-300 text-xs">Description</Label>
                             <Textarea
                               placeholder="Describe your role or achievements..."
                               value={item.description}
@@ -1158,7 +1160,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                                 setCustomSections(list);
                               }}
                               rows={2.5}
-                              className="rounded-lg border-slate-200 text-xs leading-relaxed"
+                              className="rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs leading-relaxed text-slate-800 dark:text-slate-200"
                             />
                           </div>
                         </div>
@@ -1168,7 +1170,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                         variant="outline"
                         size="sm"
                         onClick={() => handleAddCustomItem(sectIdx)}
-                        className="gap-1.5 rounded-lg border-slate-200 mt-2"
+                        className="gap-1.5 rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 mt-2"
                       >
                         <Plus className="w-3.5 h-3.5" /> Add Item
                       </Button>
@@ -1178,7 +1180,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
                 <Button
                   variant="outline"
                   onClick={handleAddCustomSection}
-                  className="w-full gap-2 border-dashed border-slate-300 rounded-xl py-5"
+                  className="w-full gap-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl py-5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200"
                 >
                   <Plus className="w-4 h-4" />
                   Add Custom Section
@@ -1189,22 +1191,22 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             {/* Review Step */}
             {currentStep === 'review' && (
               <div className="space-y-5 animate-fade-slide-up">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4.5 flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <p className="text-sm text-emerald-800 font-semibold">Your resume skeleton is complete. Ready to load into the live editor!</p>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4.5 flex items-center gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <p className="text-sm text-emerald-200 font-semibold">Your resume skeleton is complete. Ready to load into the live editor!</p>
                 </div>
-                <div className="space-y-3.5 text-sm text-slate-700 bg-slate-50 border border-slate-200 p-5 rounded-xl shadow-inner">
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Full Name:</strong> <span className="font-semibold text-slate-900">{header.name || 'Not provided'}</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Job Title:</strong> <span className="font-semibold text-slate-900">{header.jobTitle || 'Not provided'}</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Email:</strong> <span className="font-semibold text-slate-900">{header.email || 'Not provided'}</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Location:</strong> <span className="font-semibold text-slate-900">{header.location || 'Not provided'}</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Skills Categories:</strong> <span className="font-semibold text-slate-900">{skills.length} categories added</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Work Experience:</strong> <span className="font-semibold text-slate-900">{experiences.length} positions listed</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Projects:</strong> <span className="font-semibold text-slate-900">{projects.length} projects listed</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Educations:</strong> <span className="font-semibold text-slate-900">{educations.length} records listed</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>Languages:</strong> <span className="font-semibold text-slate-900">{languages.length} languages added</span></p>
-                  <p className="border-b border-slate-200/60 pb-2 flex justify-between"><strong>References:</strong> <span className="font-semibold text-slate-900">{references.length} references added</span></p>
-                  <p className="flex justify-between"><strong>Custom Sections:</strong> <span className="font-semibold text-slate-900">{customSections.length} sections added</span></p>
+                <div className="space-y-3.5 text-sm text-slate-700 dark:text-slate-300 bg-[#131b2e] border border-slate-200 dark:border-white/10 p-5 rounded-xl shadow-inner">
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Full Name:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{header.name || 'Not provided'}</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Job Title:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{header.jobTitle || 'Not provided'}</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Email:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{header.email || 'Not provided'}</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Location:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{header.location || 'Not provided'}</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Skills Categories:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{skills.length} categories added</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Work Experience:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{experiences.length} positions listed</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Projects:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{projects.length} projects listed</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Educations:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{educations.length} records listed</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>Languages:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{languages.length} languages added</span></p>
+                  <p className="border-b border-slate-200/50 dark:border-white/5 pb-2 flex justify-between"><strong>References:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{references.length} references added</span></p>
+                  <p className="flex justify-between"><strong>Custom Sections:</strong> <span className="font-semibold text-slate-900 dark:text-slate-100">{customSections.length} sections added</span></p>
                 </div>
               </div>
             )}
@@ -1217,7 +1219,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
             variant="outline"
             onClick={handlePrevStep}
             disabled={currentStep === 'header'}
-            className="gap-2 rounded-xl border-slate-200 px-6 py-5 hover:bg-slate-50 transition-colors"
+            className="gap-2 rounded-xl border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-800 dark:text-slate-200 px-6 py-5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
             Previous Step
@@ -1225,7 +1227,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
           {currentStep !== 'review' ? (
             <Button
               onClick={handleNextStep}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 px-8 py-5 rounded-xl transition-all shadow-md shadow-blue-500/10"
+              className="bg-blue-650 hover:bg-blue-700 text-white font-bold gap-2 px-8 py-5 rounded-xl transition-all shadow-md shadow-blue-500/20"
             >
               Next Step
               <ChevronRight className="w-4 h-4" />
@@ -1233,7 +1235,7 @@ export default function ResumeScratchBuilder({ onComplete }: ResumeScratchBuilde
           ) : (
             <Button
               onClick={handleFinish}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 px-8 py-5 rounded-xl transition-all shadow-md shadow-emerald-500/10"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 px-8 py-5 rounded-xl transition-all shadow-md shadow-blue-500/20"
             >
               Continue to Live Editor
               <ChevronRight className="w-4 h-4" />

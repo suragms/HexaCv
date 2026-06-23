@@ -1,15 +1,16 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, CheckCircle, AlertCircle, ChevronRight, FileText, UploadCloud } from 'lucide-react';
 import { ParsedResume } from '@shared/types';
 import { trpc } from '@/lib/trpc';
 
 interface ResumeUploaderProps {
   onParsed: (data: ParsedResume) => void;
+  onStartFromScratch?: () => void;
 }
 
-export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
+export default function ResumeUploader({ onParsed, onStartFromScratch }: ResumeUploaderProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,22 +104,28 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* File Upload Area */}
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* Header Section */}
+      <div className="text-center flex flex-col items-center gap-2 mb-4">
+        <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/40 flex items-center justify-center mb-2 shadow-inner border border-blue-200 dark:border-blue-800">
+          <UploadCloud className="w-8 h-8 text-primary dark:text-blue-400" />
+        </div>
+        <h2 className="font-extrabold text-2xl text-slate-900 dark:text-slate-100">Let's Get Started</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Upload your existing resume to parse, or build from scratch.</p>
+      </div>
+
+      {/* Drag-and-Drop Zone */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`border-2 border-dashed rounded-2xl p-14 text-center transition-all duration-300 cursor-pointer group relative overflow-hidden ${
-          isDragActive 
-            ? 'border-blue-500 bg-blue-50/40 shadow-lg shadow-blue-500/5' 
-            : 'border-slate-200 hover:border-blue-450 hover:bg-slate-50/40 hover:shadow-md'
-        }`}
         onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center gap-4 cursor-pointer group relative overflow-hidden transition-all duration-300 ${
+          isDragActive 
+            ? 'border-primary bg-blue-500/10 shadow-lg shadow-blue-500/10' 
+            : 'border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/8 dark:bg-blue-500/5 hover:border-primary/60 hover:shadow-md'
+        }`}
       >
-        {/* Subtle grid mesh background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f006_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f006_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none"></div>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -131,39 +138,36 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
           }}
         />
 
-        <div className="flex flex-col items-center gap-5 relative z-10">
-          <div className="relative w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
-            <Upload className="w-9 h-9 text-white animate-pulse" style={{ animationDuration: '3s' }} />
-          </div>
-          
-          <div className="space-y-1">
-            <p className="font-extrabold text-slate-800 text-base sm:text-lg">Drag and drop your resume file</p>
-            <p className="text-sm text-slate-550 font-medium">or <span className="text-blue-600 font-bold hover:underline">browse files</span> on your device</p>
-          </div>
-          
-          {/* Format Badges */}
-          <div className="flex gap-2 justify-center pt-1.5">
-            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">PDF</span>
-            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">DOCX</span>
-            <span className="px-2.5 py-1 bg-white text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200/80 shadow-sm">TXT</span>
-          </div>
-
-          <p className="text-xs text-slate-400 font-semibold">Maximum file size: 10MB</p>
+        <div className="w-12 h-12 rounded-lg bg-blue-100/50 dark:bg-blue-950/30 flex items-center justify-center text-primary group-hover:scale-115 transition-transform duration-300">
+          <Upload className="w-6 h-6 text-primary dark:text-blue-400" />
         </div>
+        
+        <div>
+          <p className="text-base font-bold text-slate-800 dark:text-slate-200">Drag and drop your file here</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Supports PDF, DOCX, or TXT</p>
+        </div>
+
+        <Button 
+          type="button" 
+          className="mt-2 bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-sm"
+        >
+          Browse Files
+        </Button>
       </div>
 
       {/* File Info */}
       {file && (
-        <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex items-center justify-between animate-fade-slide-up">
+        <div className="border border-slate-200 dark:border-white/10 rounded-xl p-4 bg-slate-50/50 dark:bg-white/5 shadow-sm flex items-center justify-between animate-fade-slide-up">
           <div>
-            <p className="font-bold text-slate-800 text-sm">{file.name}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{(file.size / 1024).toFixed(2)} KB</p>
+            <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{file.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{(file.size / 1024).toFixed(2)} KB</p>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            className="text-red-500 hover:text-red-650 hover:bg-red-50/50 rounded-lg font-semibold"
-            onClick={() => {
+            className="text-red-500 hover:text-red-650 hover:bg-red-500/10 rounded-lg font-semibold"
+            onClick={(e) => {
+              e.stopPropagation();
               setFile(null);
               setSuccess(false);
             }}
@@ -183,9 +187,9 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
 
       {/* Success Alert */}
       {success && (
-        <Alert className="bg-green-50/50 border-green-200 rounded-xl shadow-sm">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800 font-semibold text-xs leading-relaxed">
+        <Alert className="bg-green-500/10 border-green-500/20 rounded-xl shadow-sm text-green-800 dark:text-green-200">
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertDescription className="font-semibold text-xs leading-relaxed">
             Resume uploaded and parsed successfully! Your information is ready to edit.
           </AlertDescription>
         </Alert>
@@ -196,7 +200,7 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
         <Button
           onClick={handleUpload}
           disabled={uploading}
-          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold gap-2 py-6 rounded-xl shadow-md hover:shadow transition-all text-sm"
+          className="w-full bg-primary hover:bg-primary/95 text-white font-bold gap-2 py-5 rounded-lg shadow-md transition-all text-sm border-none"
         >
           {uploading ? (
             <>
@@ -212,27 +216,31 @@ export default function ResumeUploader({ onParsed }: ResumeUploaderProps) {
         </Button>
       )}
 
-      {/* Next Steps */}
-      {success && (
-        <div className="bg-blue-50/30 border border-blue-150 rounded-xl p-5 shadow-sm animate-fade-slide-up">
-          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2.5">
-            Suggested Next Steps
-          </p>
-          <ol className="space-y-2 text-xs text-slate-650 font-medium">
-            <li className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">1</span>
-              <span>Review and edit parsed resume items in the builder layout.</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">2</span>
-              <span>Compare your resume against target job description tags.</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-[10px] font-bold">3</span>
-              <span>Instantly print/export to PDF when satisfied with matches.</span>
-            </li>
-          </ol>
-        </div>
+      {/* OR Divider */}
+      {onStartFromScratch && !file && (
+        <>
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+            <span className="flex-shrink-0 mx-4 text-xs font-bold text-slate-400 dark:text-slate-500 tracking-widest">OR</span>
+            <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+          </div>
+
+          {/* Secondary Option Card */}
+          <button 
+            type="button"
+            onClick={onStartFromScratch}
+            className="w-full rounded-lg p-4 flex items-center gap-4 text-left border border-slate-200 dark:border-white/10 bg-white/70 hover:bg-white dark:bg-white/5 dark:hover:bg-white/8 transition-all hover:scale-[1.01] hover:shadow-sm group"
+          >
+            <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-950/50 transition-colors">
+              <FileText className="w-6 h-6 text-slate-500 dark:text-slate-400 group-hover:text-primary transition-colors" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Start from Scratch</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Use our step-by-step builder to create a new CV.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+          </button>
+        </>
       )}
     </div>
   );

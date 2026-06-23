@@ -293,7 +293,7 @@ export default function ATSScanner({ resumes, activeResumeId, onSelectResume }: 
             </div>
           ) : (
             <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl h-96 flex flex-col items-center justify-center text-center p-8">
-              <FileText className="w-16 h-16 text-slate-300 mb-4" />
+              <FileText className="w-16 h-16 text-slate-700 dark:text-slate-300 mb-4" />
               <h3 className="text-lg font-bold text-slate-700">No Analysis Available</h3>
               <p className="text-sm text-slate-500 max-w-sm mt-1">
                 Configure your target CV and the posting description on the left, then click Scan to retrieve compliance metrics.

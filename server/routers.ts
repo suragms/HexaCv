@@ -169,6 +169,9 @@ export const appRouter = router({
       .input(z.object({
         jobTitle: z.string(),
         experienceDetails: z.string(),
+        experienceLevel: z.string().optional(),
+        market: z.string().optional(),
+        jobDescription: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
@@ -180,7 +183,11 @@ export const appRouter = router({
               },
               {
                 role: "user",
-                content: `Job Title: ${input.jobTitle}\nExperience Details: ${input.experienceDetails}`,
+                content: `Job Title: ${input.jobTitle}
+Experience Level: ${input.experienceLevel || "Not specified"}
+Target Market: ${input.market || "Global"}
+User Background/Highlights: ${input.experienceDetails || "Not specified"}
+${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}`,
               },
             ],
             response_format: {

@@ -1,17 +1,13 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePWA } from '@/hooks/usePWA';
 import {
   ArrowRight,
   Download,
-  FileText,
   Zap,
   Target,
   Smartphone,
-  CheckCircle,
-  Code,
-  Eye,
+  Upload,
+  Layers,
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { useAuth } from '@/_core/hooks/useAuth';
@@ -19,30 +15,21 @@ import { useAuth } from '@/_core/hooks/useAuth';
 export default function Landing() {
   const { installPrompt, isOnline, installApp } = usePWA();
   const { isAuthenticated } = useAuth();
-  const [activeTemplateView, setActiveTemplateView] = useState<'preview' | 'ats'>('preview');
+
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 font-sans overflow-x-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-slate-100 shadow-sm transition-all duration-300">
-        <div className="container max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <img 
-              src="/icon-192.png" 
-              alt="HexaCv Logo" 
-              className="w-9 h-9 rounded-xl object-contain shadow-sm border border-slate-100 animate-logo-hover transition-transform duration-300" 
-            />
-            <span className="font-bold text-xl text-slate-900 tracking-tight bg-gradient-to-r from-blue-700 to-indigo-600 bg-clip-text text-transparent group-hover:from-blue-800 group-hover:to-indigo-700 transition-colors">
-              HexaCv
-            </span>
+    <div className="min-h-screen bg-background text-foreground font-sans overflow-x-hidden glass-bg">
+      {/* TopAppBar Navigation */}
+      <header className="bg-white/80 dark:bg-surface-container/80 backdrop-blur-xl fixed top-0 w-full z-50 shadow-sm border-b border-outline-variant/30">
+        <div className="flex justify-between items-center px-6 md:px-12 h-16 w-full max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <span className="text-primary text-[28px]"><Layers className="w-7 h-7 text-primary" /></span>
+            <span className="font-bold text-xl text-foreground dark:text-slate-100 tracking-tight group-hover:text-primary transition-colors">HexaCv</span>
           </div>
-          
+
           <nav className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">
+            <a href="#features" className="text-muted-foreground font-medium hover:text-primary dark:hover:text-primary transition-colors duration-200">
               Features
-            </a>
-            <a href="#templates" className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">
-              Template
             </a>
           </nav>
 
@@ -52,7 +39,7 @@ export default function Landing() {
                 variant="outline"
                 size="sm"
                 onClick={installApp}
-                className="hidden sm:inline-flex gap-2 border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200 transition-all"
+                className="hidden sm:inline-flex gap-2 border-slate-200/50 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-blue-400 bg-card hover:bg-muted dark:bg-white/5 transition-all"
               >
                 <Download className="w-4 h-4" />
                 Install App
@@ -60,19 +47,19 @@ export default function Landing() {
             )}
             {isAuthenticated ? (
               <Link href="/builder">
-                <Button size="sm" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow transition-all">
+                <Button size="sm" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm hover:shadow transition-all border border-blue-500/30">
                   Go to Dashboard
                 </Button>
               </Link>
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900 font-medium">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground font-medium hover:bg-black/5 dark:hover:bg-white/5">
                     Sign In
                   </Button>
                 </Link>
                 <Link href="/builder">
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 shadow-sm transition-all hidden sm:inline-flex">
+                  <Button size="sm" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm hover:shadow transition-all border border-blue-500/30">
                     Build Resume
                   </Button>
                 </Link>
@@ -82,414 +69,191 @@ export default function Landing() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="container max-w-6xl mx-auto px-6 py-16 md:py-24">
-        <div className="grid lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-7 text-left space-y-6 animate-fade-slide-up">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50/60 border border-blue-100 text-blue-700 rounded-full text-xs font-semibold tracking-wide">
-              <span>✨ Powered by HexaStack Solutions</span>
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-tight tracking-tight">
-              Build Your Perfect Resume with{' '}
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent">
-                Precision Match
-              </span>
-            </h1>
-            
-            <p className="text-lg md:text-xl text-slate-600 leading-relaxed max-w-xl">
-              Upload your CV or build from scratch. Automatically tailor your content to match target job descriptions with precision keywords and instant ATS score reviews.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 pt-2">
-              <Link href="/builder">
-                <Button size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full sm:w-auto shadow-md hover:shadow-lg transition-all gap-2 py-6 px-8 text-base">
-                  Build Resume Now
-                  <ArrowRight className="w-5 h-5" />
-                </Button>
-              </Link>
-              {!isAuthenticated && (
-                <Link href="/login">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-slate-200 hover:bg-slate-50 transition-all gap-2 py-6 px-8 text-base text-slate-700">
-                    Get Started Free
+      <main className="flex-grow pt-24 pb-20">
+        {/* Hero Section */}
+        <section className="max-w-7xl mx-auto px-6 md:px-12 pt-12 md:pt-20 pb-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="text-center lg:text-left z-10 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300 rounded-full text-xs font-semibold tracking-wide">
+                <span>✨ Powered by HexaStack Solutions</span>
+              </div>
+              
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground dark:text-slate-100 leading-tight tracking-tight">
+                Next-Gen Resume Building. <span className="gradient-text">Designed for ATS Victory.</span>
+              </h1>
+              
+              <p className="text-lg md:text-xl text-muted-foreground dark:text-slate-350 leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                Upload, optimize, and export high-scoring professional resumes client-side. Built for ambitious professionals who value efficiency and modern aesthetics.
+              </p>
+              
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
+                <Link href="/builder?mode=upload">
+                  <Button size="lg" className="w-full sm:w-auto px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg hover:shadow-blue-500/20 hover:brightness-110 transition-all duration-300 transform hover:-translate-y-0.5 gap-2">
+                    Start Building Free
+                    <ArrowRight className="w-5 h-5" />
                   </Button>
                 </Link>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-2 text-sm text-slate-500 pt-2 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              {isOnline ? (
-                <span>Works offline • No account required</span>
-              ) : (
-                <span>Currently offline • All changes saved locally</span>
-              )}
-            </div>
-          </div>
-          
-          {/* Hero Visual Mockup */}
-          <div className="lg:col-span-5 relative w-full h-[440px] flex items-center justify-center select-none">
-            {/* Background glowing gradients */}
-            <div className="absolute w-72 h-72 bg-blue-400/20 rounded-full blur-3xl -z-10 animate-drift-orb-1"></div>
-            <div className="absolute w-64 h-64 bg-indigo-400/10 rounded-full blur-3xl -z-10 translate-x-20 translate-y-12 animate-drift-orb-2"></div>
-
-            {/* Mockup Resume Card */}
-            <div className="absolute top-8 left-4 w-[280px] bg-white rounded-xl shadow-2xl border border-slate-100 p-5 rotate-[-3deg] hover:rotate-0 hover:scale-[1.02] hover:z-30 transition-all duration-500 animate-float-resume">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                  SK
-                </div>
-                <div>
-                  <div className="font-bold text-slate-800 text-xs">Sarah K. Jenkins</div>
-                  <div className="text-[9px] text-blue-600 font-semibold">Senior Software Engineer</div>
-                </div>
+                <a href="#features" className="w-full sm:w-auto">
+                  <Button size="lg" className="w-full px-8 py-6 glass-panel rounded-xl font-bold text-foreground hover:bg-slate-100/50 dark:hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2 border border-slate-200/50 dark:border-white/15 bg-slate-50/50 dark:bg-white/5">
+                    Learn More
+                  </Button>
+                </a>
               </div>
-              <div className="space-y-3">
-                <div>
-                  <div className="text-[8px] font-bold text-slate-400 tracking-wider uppercase mb-1">Work Experience</div>
-                  <div className="space-y-1.5">
-                    <div className="h-1.5 bg-slate-100 rounded w-11/12"></div>
-                    <div className="h-1.5 bg-slate-100 rounded w-5/6"></div>
-                    <div className="h-1.5 bg-slate-100 rounded w-4/5"></div>
+              
+              <div className="flex items-center justify-center lg:justify-start gap-2 text-sm text-slate-400 pt-2 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>✓ Online • Works offline • No account required</span>
+              </div>
+            </div>
+
+            {/* Right visuals */}
+            <div className="relative w-full h-[440px] flex items-center justify-center select-none mt-12 lg:mt-0">
+              {/* Background glowing gradients */}
+              <div className="absolute w-72 h-72 bg-blue-500/10 rounded-full blur-3xl -z-10 animate-drift-orb-1"></div>
+              <div className="absolute w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -z-10 translate-x-20 translate-y-12 animate-drift-orb-2"></div>
+
+              {/* Mockup Resume Card */}
+              <div className="absolute top-8 left-4 w-[280px] glass-panel rounded-xl shadow-2xl border border-slate-200 dark:border-white/15 p-5 rotate-[-3deg] hover:rotate-0 hover:scale-[1.02] hover:z-30 transition-all duration-500 animate-float-resume bg-white/60 dark:bg-slate-900/40">
+                <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/10 pb-3 mb-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                    SK
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-slate-100 text-xs">Sarah K. Jenkins</div>
+                    <div className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold">Senior Software Engineer</div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[8px] font-bold text-slate-400 tracking-wider uppercase mb-1">Key Skills</div>
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[7px] font-bold">React</span>
-                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[7px] font-bold">TypeScript</span>
-                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[7px] font-bold">NodeJS</span>
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-[8px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1">Work Experience</div>
+                    <div className="space-y-1.5">
+                      <div className="h-1.5 bg-slate-200 dark:bg-slate-800 rounded w-11/12"></div>
+                      <div className="h-1.5 bg-slate-200 dark:bg-slate-800 rounded w-5/6"></div>
+                      <div className="h-1.5 bg-slate-200 dark:bg-slate-800 rounded w-4/5"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[8px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1">Key Skills</div>
+                    <div className="flex flex-wrap gap-1">
+                      <span className="px-1.5 py-0.5 bg-blue-50/50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[7px] font-bold">React</span>
+                      <span className="px-1.5 py-0.5 bg-blue-50/50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[7px] font-bold">TypeScript</span>
+                      <span className="px-1.5 py-0.5 bg-blue-50/50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[7px] font-bold">NodeJS</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Mockup AI Suggestion Box */}
-            <div className="absolute bottom-6 right-2 w-[250px] bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 p-4 rotate-[4deg] hover:rotate-0 hover:scale-[1.02] hover:z-30 transition-all duration-500 animate-float-suggestion z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
-                  <Zap className="w-3 h-3 fill-current" />
+              {/* Mockup AI Suggestion Box */}
+              <div className="absolute bottom-6 right-2 w-[250px] glass-floating text-foreground rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 p-4 rotate-[4deg] hover:rotate-0 hover:scale-[1.02] hover:z-30 transition-all duration-500 animate-float-suggestion z-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 dark:text-blue-400">
+                    <Zap className="w-3 h-3 fill-current" />
+                  </div>
+                  <div className="font-semibold text-xs text-slate-900 dark:text-slate-100">Smart Alignment Suggestion</div>
                 </div>
-                <div className="font-semibold text-xs text-slate-100">Smart Alignment Suggestion</div>
+                <p className="text-[9px] text-slate-600 dark:text-slate-300 leading-relaxed mb-3">
+                  Add <span className="text-blue-600 dark:text-blue-400 font-semibold">"Architected cloud-native microservices"</span> to match target job keyword: <span className="text-emerald-600 dark:text-emerald-400 font-semibold">"Cloud Architecture"</span>.
+                </p>
+                <div className="flex gap-2">
+                  <div className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[8px] rounded transition-colors cursor-pointer">
+                    Apply Suggestion
+                  </div>
+                  <div className="px-2.5 py-1 bg-slate-100/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-650 dark:text-slate-300 font-semibold text-[8px] rounded transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/10">
+                    Ignore
+                  </div>
+                </div>
               </div>
-              <p className="text-[9px] text-slate-350 leading-relaxed mb-3">
-                Add <span className="text-blue-400 font-semibold">"Architected cloud-native microservices"</span> to match target job keyword: <span className="text-emerald-400">"Cloud Architecture"</span>.
-              </p>
-              <div className="flex gap-2">
-                <div className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[8px] rounded transition-colors cursor-pointer">
-                  Apply Suggestion
-                </div>
-                <div className="px-2.5 py-1 bg-slate-800 text-slate-450 font-semibold text-[8px] rounded transition-colors cursor-pointer">
-                  Ignore
-                </div>
-              </div>
-            </div>
 
-            {/* Mockup ATS Score badge */}
-            <div className="absolute top-4 right-8 w-[125px] bg-white rounded-xl shadow-lg border border-slate-50 p-3 flex items-center gap-2.5 rotate-[2deg] hover:rotate-0 hover:scale-[1.05] hover:z-30 transition-all duration-300 animate-float-ats z-20">
-              <div className="relative w-8 h-8 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="16" cy="16" r="13" stroke="#f1f5f9" strokeWidth="3" fill="transparent" />
-                  <circle cx="16" cy="16" r="13" stroke="#10b981" strokeWidth="3" fill="transparent" strokeDasharray="81.6" strokeDashoffset="12" />
-                </svg>
-                <span className="absolute text-[8px] font-extrabold text-slate-800">94%</span>
-              </div>
-              <div>
-                <div className="text-[9px] font-bold text-slate-700 leading-none">ATS Score</div>
-                <div className="text-[7px] text-emerald-600 font-bold mt-1">Highly Aligned</div>
+              {/* Mockup ATS Score badge */}
+              <div className="absolute top-4 right-8 w-[125px] glass-panel rounded-xl shadow-lg border border-slate-200 dark:border-white/15 p-3 flex items-center gap-2.5 rotate-[2deg] hover:rotate-0 hover:scale-[1.05] hover:z-30 transition-all duration-300 animate-float-ats z-20 bg-white/60 dark:bg-slate-900/40">
+                <div className="relative w-8 h-8 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="16" cy="16" r="13" stroke="currentColor" className="text-slate-100 dark:text-white/5" strokeWidth="3" fill="transparent" />
+                    <circle cx="16" cy="16" r="13" stroke="#16a34a" strokeWidth="3" fill="transparent" strokeDasharray="81.6" strokeDashoffset="12" />
+                  </svg>
+                  <span className="absolute text-[8px] font-extrabold text-slate-900 dark:text-slate-100">92%</span>
+                </div>
+                <div>
+                  <div className="text-[9px] font-bold text-slate-800 dark:text-slate-200 leading-none">ATS Score</div>
+                  <div className="text-[7px] text-emerald-600 dark:text-emerald-500 font-bold mt-1">Highly Aligned</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features Section */}
-      <section id="features" className="bg-white py-20 border-t border-slate-100">
-        <div className="container max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
-              Everything You Need to Get Hired
-            </h2>
-            <p className="text-lg text-slate-600 leading-relaxed">
-              Powerful built-in tools to extract, optimize, and tailor your professional profile
-            </p>
+        {/* Features Bento Grid */}
+        <section id="features" className="max-w-7xl mx-auto px-6 md:px-12 py-20 relative border-t border-slate-200/50 dark:border-white/5">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-slate-100 mb-4 tracking-tight">Engineered for Success</h2>
+            <p className="text-base text-slate-500 dark:text-slate-400 max-w-xl mx-auto">Everything you need to construct a compelling career narrative, engineered for precision and impact.</p>
           </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                icon: <UploadIcon className="w-5 h-5" />,
-                title: 'Smart Resume Parser',
-                description: 'Upload PDF, Word, or text files. Automatically parse and extract your structured history in seconds.',
+                icon: <Upload className="w-6 h-6 text-primary" />,
+                title: 'Smart Parser',
+                description: 'Upload your existing PDF or Word files. Our advanced client-side parser extracts text intelligently, maintaining structural integrity without sending data to a server.',
+                colspan: ''
               },
               {
-                icon: <Zap className="w-5 h-5" />,
-                title: 'Precision Job Matching',
-                description: 'Match your resume to any job description. Get instant missing keyword suggestions and content edits.',
+                icon: <Zap className="w-6 h-6 text-primary" />,
+                title: 'AI Optimization',
+                description: 'Tailor your content to specific job descriptions. Our local AI models suggest high-impact keywords and structural improvements to boost ATS compatibility.',
+                colspan: ''
               },
               {
-                icon: <Target className="w-5 h-5" />,
-                title: 'ATS Match Rating',
-                description: 'See exactly how well your profile aligns with target roles before submitting application forms.',
-              },
-              {
-                icon: <FileText className="w-5 h-5" />,
-                title: 'Modern Single Column Template',
-                description: 'A clean, ATS-optimized layout designed to clear filters easily and look excellent to recruiters.',
-              },
-              {
-                icon: <CheckCircle className="w-5 h-5" />,
-                title: 'Instant PDF Export',
-                description: 'Generate, preview, and download your polished PDF copy instantly with print-perfect formatting.',
-              },
-              {
-                icon: <Smartphone className="w-5 h-5" />,
-                title: 'Progressive Web App',
-                description: 'Install directly onto your device. Enjoy quick access, responsive layouts, and robust offline support.',
-              },
+                icon: <Target className="w-6 h-6 text-secondary" />,
+                title: 'Private & Offline',
+                description: 'Your professional data is highly sensitive. Processing happens entirely within your browser. Install as a PWA and work offline anywhere.',
+                colspan: 'md:col-span-3 lg:col-span-1'
+              }
             ].map((feature, idx) => (
-              <Card key={idx} className="border-slate-100 shadow-sm hover:border-blue-400 hover:shadow-md transition-all duration-300 group">
-                <CardHeader>
-                  <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 shadow-sm">
-                    {feature.icon}
-                  </div>
-                  <CardTitle className="text-lg text-slate-900 group-hover:text-blue-700 transition-colors font-bold">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-slate-600 text-sm leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
+              <div key={idx} className={`glass-panel glass-interactive rounded-2xl p-8 flex flex-col items-start ${feature.colspan}`}>
+                <div className="w-12 h-12 rounded-full bg-slate-100/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center mb-6">
+                  {feature.icon}
+                </div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 mb-2">{feature.title}</h3>
+                <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed flex-grow">{feature.description}</p>
+              </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Template Section */}
-      <section id="templates" className="py-20 bg-slate-50 border-t border-b border-slate-100">
-        <div className="container max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
-              One Professional Template
-            </h2>
-            <p className="text-lg text-slate-600 leading-relaxed">
-              Designed specifically to meet ATS guidelines and clean visual presentation standards
-            </p>
-          </div>
 
-          {/* Interactive View Toggle */}
-          <div className="flex justify-center gap-3 mb-8">
-            <Button
-              variant={activeTemplateView === 'preview' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTemplateView('preview')}
-              className="gap-2 shadow-sm font-semibold transition-all"
-            >
-              <Eye className="w-4 h-4" />
-              Document Preview
-            </Button>
-            <Button
-              variant={activeTemplateView === 'ats' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTemplateView('ats')}
-              className="gap-2 shadow-sm font-semibold transition-all"
-            >
-              <Code className="w-4 h-4" />
-              ATS Parser Output
-            </Button>
-          </div>
 
-          <div className="max-w-2xl mx-auto">
-            <Card className="border-slate-200 overflow-hidden shadow-lg bg-white">
-              <div className="bg-slate-100/50 border-b border-slate-100 p-8 flex justify-center min-h-[360px] items-center">
-                {activeTemplateView === 'preview' ? (
-                  /* Mini Resume Canvas */
-                  <div className="w-full max-w-[420px] bg-white rounded shadow-md border border-slate-150 p-6 space-y-4 text-left font-sans select-none animate-fade-slide-up">
-                    {/* Title Header */}
-                    <div className="text-center pb-3 border-b border-blue-600/10">
-                      <div className="font-bold text-sm text-slate-900 tracking-tight leading-none text-center">Jonathan Bennett</div>
-                      <div className="text-[7.5px] text-slate-500 mt-1 flex justify-center gap-1.5 flex-wrap">
-                        <span>jonathan@email.com</span>
-                        <span>•</span>
-                        <span>+1 (555) 012-3456</span>
-                        <span>•</span>
-                        <span>Austin, TX</span>
-                      </div>
-                    </div>
-                    
-                    {/* Summary */}
-                    <div>
-                      <div className="text-[8px] font-bold text-blue-700 uppercase tracking-wider mb-0.5">Professional Summary</div>
-                      <p className="text-[7.5px] text-slate-600 leading-relaxed">
-                        Results-oriented Backend Engineer with 5+ years of experience constructing scalable distributed architectures. Expert in TypeScript, NodeJS, PostgreSQL, and cloud deployments.
-                      </p>
-                    </div>
-                    
-                    {/* Experience */}
-                    <div>
-                      <div className="text-[8px] font-bold text-blue-700 uppercase tracking-wider mb-0.5">Work Experience</div>
-                      <div className="space-y-2">
-                        <div>
-                          <div className="flex justify-between text-[7.5px] font-bold text-slate-800 leading-none">
-                            <span>Senior Backend Engineer • cloudFlow Inc.</span>
-                            <span className="text-slate-400 font-normal">2023 - Present</span>
-                          </div>
-                          <ul className="list-disc list-inside text-[7px] text-slate-600 space-y-0.5 mt-0.5 pl-1.5">
-                            <li>Engineered event-driven APIs scaling to handle over 10M daily requests.</li>
-                            <li>Reduced infrastructure overhead by 22% through container orchestration.</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
+        {/* PWA Install Banner */}
+        <section className="bg-gradient-to-br from-slate-900 via-blue-950/20 to-slate-900 text-white py-20 relative overflow-hidden border-t border-b border-slate-200/50 dark:border-white/5">
+          {/* Subtle grid pattern background */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+          <div className="absolute -top-24 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -z-0"></div>
 
-                    {/* Skills */}
-                    <div>
-                      <div className="text-[8px] font-bold text-blue-700 uppercase tracking-wider mb-0.5">Skills</div>
-                      <div className="text-[7.5px] text-slate-700">
-                        <strong>Languages & Tools:</strong> JavaScript, Go, SQL, Docker, Redis, Kubernetes, AWS
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Mock ATS Code Highlighted View */
-                  <div className="w-full max-w-[420px] bg-slate-950 rounded-lg shadow-md border border-slate-800 p-5 text-left font-mono text-[9px] text-slate-300 leading-relaxed overflow-x-auto select-all animate-fade-slide-up">
-                    <div className="flex items-center justify-between border-b border-slate-900 pb-2 mb-3 text-slate-500">
-                      <span>ats_parser_output.json</span>
-                      <span className="text-emerald-500 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        100% Parsed
-                      </span>
-                    </div>
-                    <pre className="text-emerald-400">
-                      {`{`}
-                      <br />
-                      {`  `}
-                      <span className="text-blue-400">"candidate"</span>
-                      {`: `}
-                      <span className="text-orange-300">"Jonathan Bennett"</span>
-                      {`,`}
-                      <br />
-                      {`  `}
-                      <span className="text-blue-400">"contact"</span>
-                      {`: {`}
-                      <br />
-                      {`    `}
-                      <span className="text-blue-400">"email"</span>
-                      {`: `}
-                      <span className="text-orange-300">"jonathan@email.com"</span>
-                      {`,`}
-                      <br />
-                      {`    `}
-                      <span className="text-blue-400">"phone"</span>
-                      {`: `}
-                      <span className="text-orange-300">"+1 (555) 012-3456"</span>
-                      {`,`}
-                      <br />
-                      {`    `}
-                      <span className="text-blue-400">"location"</span>
-                      {`: `}
-                      <span className="text-orange-300">"Austin, TX"</span>
-                      <br />
-                      {`  },`}
-                      <br />
-                      {`  `}
-                      <span className="text-blue-400">"skills"</span>
-                      {`: [`}
-                      <br />
-                      {`    `}
-                      <span className="text-orange-300">"JavaScript"</span>
-                      {`, `}
-                      <span className="text-orange-300">"Go"</span>
-                      {`, `}
-                      <span className="text-orange-300">"SQL"</span>
-                      {`, `}
-                      <span className="text-orange-300">"Docker"</span>
-                      {`, `}
-                      <span className="text-orange-300">"AWS"</span>
-                      <br />
-                      {`  ],`}
-                      <br />
-                      {`  `}
-                      <span className="text-blue-400">"experienceYears"</span>
-                      {`: `}
-                      <span className="text-purple-400">5.5</span>
-                      <br />
-                      {`}`}
-                    </pre>
-                  </div>
-                )}
-              </div>
-              
-              <CardHeader className="p-6">
-                <CardTitle className="text-2xl font-bold text-slate-900">Classic ATS Blue Layout</CardTitle>
-                <CardDescription className="text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  A beautiful, clean, single-column document designed for maximum readability. Supported by clear section hierarchy, professional font ratios, and optimal spacing that prevents parser conversion issues.
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="px-6 pb-6 pt-0">
-                <div className="grid sm:grid-cols-2 gap-3.5 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-bold text-xs">
-                      ✓
-                    </div>
-                    <span className="text-slate-600">ATS parser compatible standard formatting</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-bold text-xs">
-                      ✓
-                    </div>
-                    <span className="text-slate-600">Professional spacing and margins</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-bold text-xs">
-                      ✓
-                    </div>
-                    <span className="text-slate-600">Supports certifications & custom links</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-bold text-xs">
-                      ✓
-                    </div>
-                    <span className="text-slate-600">Looks excellent on screen and paper</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* PWA Install Banner */}
-      <section className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white py-20 relative overflow-hidden">
-        {/* Subtle grid pattern background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-        <div className="absolute -top-24 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -z-0"></div>
-
-        <div className="container max-w-4xl mx-auto px-6 text-center relative z-10 space-y-6">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto border border-white/10 backdrop-blur-sm shadow-inner">
-            <Smartphone className="w-7 h-7 text-blue-400" />
-          </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">Install HexaCv on Your Device</h2>
-          <p className="text-slate-300 max-w-xl mx-auto text-base leading-relaxed">
-            Access your resumes instantly from your home screen, work on edits without an active network, and experience fluid native-like performance.
-          </p>
-          {installPrompt && (
-            <div className="pt-2">
-              <Button
-                size="lg"
-                className="bg-white text-blue-700 hover:bg-slate-50 font-bold transition-all shadow-md gap-2 py-6 px-8 text-base"
-                onClick={installApp}
-              >
-                <Download className="w-4 h-4" />
-                Install HexaCv App
-              </Button>
+          <div className="container max-w-4xl mx-auto px-6 text-center relative z-10 space-y-6">
+            <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center mx-auto border border-white/10 backdrop-blur-sm shadow-inner">
+              <Smartphone className="w-7 h-7 text-blue-400" />
             </div>
-          )}
-        </div>
-      </section>
+            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">Install HexaCv on Your Device</h2>
+            <p className="text-slate-300 max-w-xl mx-auto text-base leading-relaxed">
+              Access your resumes instantly from your home screen, work on edits without an active network, and experience fluid native-like performance.
+            </p>
+            {installPrompt && (
+              <div className="pt-2">
+                <Button
+                  size="lg"
+                  className="bg-[#b8c4ff] text-[#002584] hover:bg-[#b8c4ff]/90 font-bold transition-all shadow-md gap-2 py-6 px-8 text-base border-none"
+                  onClick={installApp}
+                >
+                  <Download className="w-4 h-4" />
+                  Install HexaCv App
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-16 border-t border-slate-800">
+      <footer className="bg-slate-900 dark:bg-[#060e20] text-slate-400 py-16 border-t border-slate-200/20 dark:border-white/5">
         <div className="container max-w-6xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-10 mb-12">
             <div className="space-y-4">
@@ -499,7 +263,7 @@ export default function Landing() {
                   alt="HexaCv Logo" 
                   className="w-8 h-8 rounded-lg object-contain animate-logo-hover transition-transform duration-300" 
                 />
-                <span className="font-bold text-white text-lg tracking-tight group-hover:text-blue-400 transition-colors">HexaCv</span>
+                <span className="font-bold text-white dark:text-white text-lg tracking-tight group-hover:text-primary transition-colors">HexaCv</span>
               </div>
               <p className="text-sm leading-relaxed text-slate-400">
                 Next-generation smart resume building and optimization platform.
@@ -510,18 +274,8 @@ export default function Landing() {
               <h3 className="font-semibold text-white mb-4 text-sm tracking-wider uppercase">Product</h3>
               <ul className="space-y-3 text-sm">
                 <li>
-                  <a href="#features" className="hover:text-white transition-colors">
+                  <a href="#features" className="hover:text-primary transition-colors">
                     Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#templates" className="hover:text-white transition-colors">
-                    Templates
-                  </a>
-                </li>
-                <li>
-                  <a href="/documentation" className="hover:text-white transition-colors">
-                    Documentation
                   </a>
                 </li>
               </ul>
@@ -535,7 +289,7 @@ export default function Landing() {
                     href="https://www.hexastacksolutions.com/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-white transition-colors"
+                    className="hover:text-primary transition-colors"
                   >
                     HexaStack Solutions
                   </a>
@@ -545,7 +299,7 @@ export default function Landing() {
                     href="https://www.hexastacksolutions.com/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-white transition-colors"
+                    className="hover:text-primary transition-colors"
                   >
                     Visit Website
                   </a>
@@ -562,7 +316,7 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="border-t border-slate-800 pt-8 text-center text-xs text-slate-500">
+          <div className="border-t border-white/5 pt-8 text-center text-xs text-slate-500">
             <p>
               © 2026 HexaStack Solutions. Prepared by Surag & Anandu Krishna.{' '}
               <a
@@ -578,27 +332,5 @@ export default function Landing() {
         </div>
       </footer>
     </div>
-  );
-}
-
-// Icon component for upload fallback
-function UploadIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
   );
 }
