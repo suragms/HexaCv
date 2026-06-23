@@ -37,7 +37,12 @@ const WIZARD_STEPS = [
   { id: 10, label: 'References', key: 'references', icon: Users },
   { id: 11, label: 'Custom', key: 'custom', icon: LayoutList },
   { id: 12, label: 'Layout', key: 'layout', icon: Settings },
+  { id: 13, label: 'Review & Export', key: 'review', icon: CheckCircle2 },
+  { id: 14, label: 'Live Preview', key: 'preview', icon: Eye },
 ];
+
+const FORM_STEPS = WIZARD_STEPS.slice(0, 12);
+const EDITOR_FLOW_STEPS = WIZARD_STEPS.filter((step) => step.key !== 'preview');
 
 interface ResumeEditorProps {
   resume: Resume;
@@ -48,7 +53,6 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [localResume, setLocalResume] = useState<Resume>(resume);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(resume.templateId as TemplateId);
   const [selectedJob, setSelectedJob] = useState<string>(resume.jobDescriptionId || '');
-  const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
   const [activeEditTab, setActiveEditTab] = useState<string>('header');
   const [isRewritingSummary, setIsRewritingSummary] = useState<boolean>(false);
   const [rewritingExpId, setRewritingExpId] = useState<string | null>(null);
@@ -65,9 +69,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       setSelectedJob(matched);
     }
   }, [resume.id]);
-  const [zoom, setZoom] = useState<number>(70); // Set default zoom to 70% to fit live preview side-by-side
+  const [zoom, setZoom] = useState<number>(100);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
-  const [showLivePreview, setShowLivePreview] = useState<boolean>(true);
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
   // Scrollbar and navigation state for horizontal stepper
@@ -408,7 +411,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     const importantSections = ['header', 'summary', 'skills', 'experience', 'education'];
     let filledCount = 0;
     importantSections.forEach(type => {
-      const sec = resume.sections.find(s => s.type === type);
+      const sec = localResume.sections.find(s => s.type === type);
       if (sec && sec.visible) {
         if (type === 'header' && sec.content.header?.name) filledCount++;
         if (type === 'summary' && sec.content.summary) filledCount++;
@@ -601,6 +604,8 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         return cust.length > 0 && cust.some((c: any) => c.title?.trim());
       }
       case 'layout':
+      case 'preview':
+      case 'review':
         return true; // Always considered complete
       default:
         return false;
@@ -751,18 +756,21 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   };
 
+  const activeFlowIndex = activeEditTab === 'preview'
+    ? EDITOR_FLOW_STEPS.length - 1
+    : Math.max(0, EDITOR_FLOW_STEPS.findIndex(s => s.key === activeEditTab));
+  const isFinalFlowStep = activeEditTab === 'preview'
+    || activeEditTab === EDITOR_FLOW_STEPS[EDITOR_FLOW_STEPS.length - 1].key;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full font-sans text-slate-800 dark:text-slate-200 pb-16 lg:pb-0">
-      {/* LEFT COLUMN - Edit Form with Guided Step Stepper */}
-      <div className={cn(
-        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
-        showLivePreview ? "lg:col-span-7" : "lg:col-span-12",
-        previewMode === 'preview' ? "hidden lg:flex" : "flex"
-      )}>
+    <div className="w-full h-full font-sans text-slate-800 dark:text-slate-200 pb-16 lg:pb-0">
+      {/* Editor workspace */}
+      <div className="w-full grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,460px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,560px)] gap-4 h-full min-h-0">
+        <div className="w-full flex flex-col gap-3 h-full min-h-0">
         {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
         <div className="glass-panel border border-slate-200 dark:border-white/10 rounded-xl shadow-sm shrink-0 overflow-hidden">
           {/* Row 1: Title + Action Buttons */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-white/10">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm shadow-blue-500/20 shrink-0">
                 <Sparkles className="w-4.5 h-4.5 text-white" />
@@ -784,23 +792,19 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                     Auto-saved
                   </span>
                   <span className="text-slate-550">·</span>
-                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-500 dark:text-slate-400">Step {WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1}/{WIZARD_STEPS.length}</span>
+                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-550 dark:text-slate-400">
+                    {activeEditTab === 'review' ? (
+                      "Review & Export"
+                    ) : activeEditTab === 'preview' ? (
+                      "Live Preview"
+                    ) : (
+                      `Step ${FORM_STEPS.findIndex(s => s.key === activeEditTab) + 1}/12`
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
-              <Button 
-                variant="outline" 
-                size="icon" 
-                className={cn(
-                  "h-8 w-8 border-slate-200 dark:border-white/10 rounded-lg hidden lg:flex items-center justify-center transition-all bg-slate-50/50 dark:bg-white/5",
-                  !showLivePreview && "bg-blue-950/40 border-blue-500/30 text-blue-300 hover:bg-blue-950/60"
-                )} 
-                onClick={() => setShowLivePreview(!showLivePreview)}
-                title={showLivePreview ? "Hide Live Preview" : "Show Live Preview"}
-              >
-                {showLivePreview ? <EyeOff className="w-3.5 h-3.5 text-slate-600 dark:text-slate-350" /> : <Eye className="w-3.5 h-3.5 text-blue-400" />}
-              </Button>
               <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 dark:border-white/10 rounded-lg bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo">
                 <Undo className="w-3.5 h-3.5 text-slate-600 dark:text-slate-350" />
               </Button>
@@ -810,7 +814,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
           {/* Row 2: Layout + Target Job */}
-          <div className="flex flex-wrap items-center gap-3 px-5 py-2.5 bg-slate-100/50 dark:bg-slate-950/20">
+          <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-slate-100/50 dark:bg-slate-950/20">
             <div className="flex items-center gap-1.5 bg-slate-50/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg py-1 px-2.5 shadow-xs">
               <Settings className="w-3 h-3 text-slate-500 dark:text-slate-500 dark:text-slate-400" />
               <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Exclusive ATS (Emerald)</span>
@@ -835,99 +839,160 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         </div>
 
         {/* Editor Card with guided steps */}
-        <Card className="glass-panel border-slate-200 dark:border-white/10 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-slate-50/80 dark:bg-slate-900/10 shadow-sm p-0 rounded-xl">
-          {/* Horizontal Stepper Progress Indicator Container */}
-          <div className="relative group/stepper shrink-0 w-full overflow-hidden">
-            {/* Left Scroll Button */}
-            <button
-              type="button"
-              onClick={scrollLeftDirection}
-              className={cn(
-                "absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
-                canScrollLeft ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-              )}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            {/* Left Gradient Fade Overlay */}
-            <div
-              className={cn(
-                "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-100 dark:from-[#0b1326] via-slate-100/70 dark:via-[#0b1326]/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
-                canScrollLeft ? "opacity-100" : "opacity-0"
-              )}
-            />
+        <Card className="glass-panel border-slate-200 dark:border-white/10 overflow-hidden flex flex-col flex-1 min-h-0 bg-slate-50/80 dark:bg-slate-900/10 shadow-sm p-0 rounded-xl">
+          {/* Horizontal Stepper Progress Indicator (Visible only during editor steps 1-12) */}
+          {FORM_STEPS.some(s => s.key === activeEditTab) ? (
+            <div className="relative group/stepper shrink-0 w-full overflow-hidden">
+              {/* Left Scroll Button */}
+              <button
+                type="button"
+                onClick={scrollLeftDirection}
+                className={cn(
+                  "absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                  canScrollLeft ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                )}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {/* Left Gradient Fade Overlay */}
+              <div
+                className={cn(
+                  "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-100 dark:from-[#0b1326] via-slate-100/70 dark:via-[#0b1326]/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
+                  canScrollLeft ? "opacity-100" : "opacity-0"
+                )}
+              />
 
-            {/* Scrollable Steps Wrapper */}
-            <div
-              ref={stepperRef}
-              className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth px-8 py-4 bg-slate-100/80 dark:bg-slate-950/40 backdrop-blur-sm border-b border-slate-200/50 dark:border-white/5 select-none"
-            >
-              {WIZARD_STEPS.map((step, idx) => {
-                const Icon = step.icon;
-                const isDone = isStepCompleted(step.key);
-                const isActive = activeEditTab === step.key;
-                
-                return (
-                  <div key={step.id} className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      data-step-key={step.key}
-                      onClick={() => setActiveEditTab(step.key)}
-                      className={cn(
-                        "flex items-center gap-2 p-1.5 px-3 rounded-xl text-xs font-bold transition-all border outline-none cursor-pointer",
-                        isActive 
-                          ? "bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.02]" 
-                          : isDone 
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/60 dark:bg-emerald-950/15 dark:text-emerald-400 dark:border-emerald-500/15 dark:hover:bg-emerald-900/15" 
-                            : "bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-800 dark:text-slate-200"
+              {/* Scrollable Steps Wrapper */}
+              <div
+                ref={stepperRef}
+                className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth px-8 py-3 bg-slate-100/80 dark:bg-slate-950/40 backdrop-blur-sm border-b border-slate-200/50 dark:border-white/5 select-none"
+              >
+                {FORM_STEPS.map((step, idx) => {
+                  const Icon = step.icon;
+                  const isDone = isStepCompleted(step.key);
+                  const isActive = activeEditTab === step.key;
+                  
+                  return (
+                    <div key={step.id} className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        data-step-key={step.key}
+                        onClick={() => setActiveEditTab(step.key)}
+                        className={cn(
+                          "flex items-center gap-2 p-1.5 px-3 rounded-xl text-xs font-bold transition-all border outline-none cursor-pointer",
+                          isActive 
+                            ? "bg-blue-600 text-white border-blue-600 shadow-sm scale-[1.02]" 
+                            : isDone 
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/60 dark:bg-emerald-950/15 dark:text-emerald-400 dark:border-emerald-500/15 dark:hover:bg-emerald-900/15" 
+                              : "bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-800 dark:text-slate-200"
+                        )}
+                      >
+                        <span className={cn(
+                          "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black border",
+                          isActive 
+                            ? "bg-white/20 border-slate-300 dark:border-white/30 text-white" 
+                            : isDone 
+                              ? "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:text-emerald-300" 
+                              : "bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500"
+                        )}>
+                          {isDone ? '✓' : step.id}
+                        </span>
+                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                        <span>{step.label}</span>
+                      </button>
+                      {idx < FORM_STEPS.length - 1 && (
+                        <div className={cn(
+                          "w-4 h-[2px] rounded-full shrink-0",
+                          isDone ? "bg-emerald-500" : "bg-slate-300 dark:bg-white/10"
+                        )} />
                       )}
-                    >
-                      <span className={cn(
-                        "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black border",
-                        isActive 
-                          ? "bg-white/20 border-slate-300 dark:border-white/30 text-white" 
-                          : isDone 
-                            ? "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:text-emerald-300" 
-                            : "bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500"
-                      )}>
-                        {isDone ? '✓' : step.id}
-                      </span>
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span>{step.label}</span>
-                    </button>
-                    {idx < WIZARD_STEPS.length - 1 && (
-                      <div className={cn(
-                        "w-4 h-[2px] rounded-full shrink-0",
-                        isDone ? "bg-emerald-500" : "bg-slate-300 dark:bg-white/10"
-                      )} />
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Right Gradient Fade Overlay */}
+              <div
+                className={cn(
+                  "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-100 dark:from-[#0b1326] via-slate-100/70 dark:via-[#0b1326]/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
+                  canScrollRight ? "opacity-100" : "opacity-0"
+                )}
+              />
+
+              {/* Right Scroll Button */}
+              <button
+                type="button"
+                onClick={scrollRightDirection}
+                className={cn(
+                  "absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                  canScrollRight ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                )}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
+            /* Premium Phase Tracker for review and mobile preview */
+            <div className="flex items-center justify-center gap-3 py-4 bg-slate-100/80 dark:bg-slate-950/40 border-b border-slate-200/50 dark:border-white/5 select-none text-[11px] font-bold shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveEditTab('header')}
+                className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:opacity-85 transition-opacity"
+              >
+                <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/30 flex items-center justify-center text-[10px] font-black">✓</span>
+                <span>1. Resume Editor</span>
+              </button>
+              <div className="w-8 h-[2px] bg-emerald-500" />
+              
+              <button
+                type="button"
+                onClick={() => setActiveEditTab('review')}
+                className={cn(
+                  "flex items-center gap-2 transition-opacity hover:opacity-85",
+                  activeEditTab === 'review' 
+                    ? "text-blue-600 dark:text-blue-450" 
+                    : "text-emerald-600 dark:text-emerald-400"
+                )}
+              >
+                <span className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border",
+                  activeEditTab === 'review'
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                )}>
+                  {activeEditTab === 'review' ? '2' : '✓'}
+                </span>
+                <span>2. Review & Export</span>
+              </button>
+              <div className={cn(
+                "w-8 h-[2px] lg:hidden",
+                activeEditTab === 'preview' ? "bg-emerald-500" : "bg-slate-350 dark:bg-white/10"
+              )} />
 
-            {/* Right Gradient Fade Overlay */}
-            <div
-              className={cn(
-                "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-100 dark:from-[#0b1326] via-slate-100/70 dark:via-[#0b1326]/70 to-transparent pointer-events-none z-10 transition-opacity duration-300",
-                canScrollRight ? "opacity-100" : "opacity-0"
-              )}
-            />
-
-            {/* Right Scroll Button */}
-            <button
-              type="button"
-              onClick={scrollRightDirection}
-              className={cn(
-                "absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
-                canScrollRight ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-              )}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setActiveEditTab('preview')}
+                className={cn(
+                  "flex items-center gap-2 transition-opacity hover:opacity-85 lg:hidden",
+                  activeEditTab === 'preview' 
+                    ? "text-blue-600 dark:text-blue-455" 
+                    : "text-slate-450 dark:text-slate-400"
+                )}
+              >
+                <span className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border",
+                  activeEditTab === 'preview'
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500"
+                )}>
+                  3
+                </span>
+                <span>3. Live Preview</span>
+              </button>
+            </div>
+          )}
           
-          <div className="flex-1 px-6 py-5 overflow-y-auto h-full">
+          <div className="flex-1 px-4 sm:px-5 py-4 overflow-y-auto h-full">
             <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full h-full">
 
 
@@ -2244,10 +2309,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   </div>
                 </TabsContent>
 
-                {/* ACHIEVEMENTS & FINAL REVIEW TAB */}
+                {/* ACHIEVEMENTS TAB */}
                 <TabsContent value="achievements" className="space-y-6">
-                  {/* 1. Achievements Editor */}
-                  <div className="space-y-4 border-b border-slate-200 dark:border-white/10 pb-6">
+                  {/* Achievements Editor */}
+                  <div className="space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider">Achievements Highlights</h3>
                       <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs border-slate-200 dark:border-white/10 hover:bg-slate-50/50 dark:bg-white/5" onClick={() => {
@@ -2282,115 +2347,150 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         </div>
                       ))}
                       {(getSectionContent('achievements').achievements || []).length === 0 && (
-                        <p className="text-xs text-slate-500 dark:text-slate-500 dark:text-slate-400 italic">No achievements added. Add key milestones to stand out.</p>
+                        <p className="text-xs text-slate-550 dark:text-slate-400 italic">No achievements added. Add key milestones to stand out.</p>
                       )}
                     </div>
                   </div>
+                </TabsContent>
 
-                  {/* 2. Review and Download Section */}
-                  <div className="space-y-6">
-                    <h3 className="font-bold text-slate-500 dark:text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider">Final Review & Export</h3>
-                    
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Detailed ATS Score Widget */}
-                      <Card className="border border-slate-200 dark:border-white/10 shadow-sm p-5 space-y-4 bg-slate-50/50 dark:bg-white/5 rounded-xl">
-                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 border-b border-slate-200 dark:border-white/10 pb-2">
-                          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          ATS Optimization Details
-                        </h4>
-                        
-                        <div className="flex items-center gap-4">
-                          {/* Radial Gauge */}
-                          <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                              <circle className="text-slate-200 dark:text-white/5 stroke-current" cx="50" cy="50" fill="transparent" r="40" strokeWidth="8"></circle>
-                              <circle className="text-emerald-600 dark:text-emerald-400 stroke-current transition-all duration-1000" cx="50" cy="50" fill="transparent" r="40" 
-                                strokeDasharray="251.2" 
-                                strokeDashoffset={251.2 * (1 - atsSummary.score / 100)} 
-                                strokeLinecap="round" 
-                                strokeWidth="8">
-                              </circle>
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center flex-col">
-                              <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{atsSummary.score}%</span>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-0.5">
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                              {atsSummary.score >= 70 ? 'Ready for Applications!' : atsSummary.score >= 40 ? 'Needs Improvement' : 'Urgent Actions Required'}
-                            </p>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Keywords: {atsSummary.matchedKeywords.length} matched</p>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Sections: {atsSummary.completenessScore}% filled</p>
+                {/* LIVE PREVIEW TAB */}
+                <TabsContent value="preview" className="space-y-5 h-full flex flex-col">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-200 dark:border-white/10 shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Eye className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="flex-1 flex justify-between items-center flex-wrap gap-3">
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-[15px] leading-tight">Resume Live Preview</h3>
+                        <p className="text-xs text-slate-550 dark:text-slate-455 mt-0.5 font-semibold">Preview how your ATS-optimized resume looks. Switch steps or zoom to inspect.</p>
+                      </div>
+                      <div className="flex gap-1.5 items-center">
+                        <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.max(50, zoom - 10))}>
+                          <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
+                        </Button>
+                        <span className="text-[11px] text-slate-700 dark:text-slate-300 font-extrabold px-1 min-w-[32px] text-center">{zoom}%</span>
+                        <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.min(150, zoom + 10))}>
+                          <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-hidden flex min-h-[500px] border border-slate-200 dark:border-white/10 rounded-xl bg-slate-100 dark:bg-[#131b2e]">
+                    <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} />
+                  </div>
+                </TabsContent>
+
+                {/* REVIEW & EXPORT TAB */}
+                <TabsContent value="review" className="space-y-6">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-[15px] leading-tight">Final Review & Export</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-semibold">Review your ATS optimization checklist and export your final resume.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* Detailed ATS Score Widget */}
+                    <Card className="border border-slate-200 dark:border-white/10 shadow-sm p-5 space-y-4 bg-slate-50/50 dark:bg-white/5 rounded-xl">
+                      <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 border-b border-slate-200 dark:border-white/10 pb-2">
+                        <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        ATS Optimization Details
+                      </h4>
+                      
+                      <div className="flex items-center gap-4">
+                        {/* Radial Gauge */}
+                        <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            <circle className="text-slate-200 dark:text-white/5 stroke-current" cx="50" cy="50" fill="transparent" r="40" strokeWidth="8"></circle>
+                            <circle className="text-emerald-600 dark:text-emerald-400 stroke-current transition-all duration-1000" cx="50" cy="50" fill="transparent" r="40" 
+                              strokeDasharray="251.2" 
+                              strokeDashoffset={251.2 * (1 - atsSummary.score / 100)} 
+                              strokeLinecap="round" 
+                              strokeWidth="8">
+                            </circle>
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center flex-col">
+                            <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{atsSummary.score}%</span>
                           </div>
                         </div>
+                        
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {atsSummary.score >= 70 ? 'Ready for Applications!' : atsSummary.score >= 40 ? 'Needs Improvement' : 'Urgent Actions Required'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Keywords: {atsSummary.matchedKeywords.length} matched</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Sections: {atsSummary.completenessScore}% filled</p>
+                        </div>
+                      </div>
 
-                        {/* Keyword list details */}
-                        <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
-                          <div>
-                            <span className="font-bold text-slate-700 dark:text-slate-350 block mb-1">Matched Keywords ({atsSummary.matchedKeywords.length}):</span>
-                            {atsSummary.matchedKeywords.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {atsSummary.matchedKeywords.slice(0, 5).map((kw, i) => (
-                                  <span key={i} className="px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 rounded font-semibold text-[9px]">{kw}</span>
-                                ))}
-                                {atsSummary.matchedKeywords.length > 5 && (
-                                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded font-semibold text-[9px]">+{atsSummary.matchedKeywords.length - 5} more</span>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-[10px] text-slate-400 dark:text-slate-550 italic">None matched yet. Tailor skills and experience sections.</p>
-                            )}
-                          </div>
-                          
-                          {atsSummary.missingKeywords.length > 0 && (
-                            <div>
-                              <span className="font-bold text-slate-700 dark:text-slate-350 block mb-1">Missing Keywords ({atsSummary.missingKeywords.length}):</span>
-                              <div className="flex flex-wrap gap-1">
-                                {atsSummary.missingKeywords.slice(0, 5).map((kw, i) => (
-                                  <span key={i} className="px-2 py-0.5 bg-rose-500/10 text-rose-700 dark:text-rose-450 border border-rose-500/20 rounded font-semibold text-[9px]">{kw}</span>
-                                ))}
-                                {atsSummary.missingKeywords.length > 5 && (
-                                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded font-semibold text-[9px]">+{atsSummary.missingKeywords.length - 5} more</span>
-                                )}
-                              </div>
+                      {/* Keyword list details */}
+                      <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
+                        <div>
+                          <span className="font-bold text-slate-700 dark:text-slate-400 block mb-1">Matched Keywords ({atsSummary.matchedKeywords.length}):</span>
+                          {atsSummary.matchedKeywords.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {atsSummary.matchedKeywords.slice(0, 5).map((kw, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 rounded font-semibold text-[9px]">{kw}</span>
+                              ))}
+                              {atsSummary.matchedKeywords.length > 5 && (
+                                <span className="px-2 py-0.5 bg-slate-100 dark:bg-white/5 text-slate-550 dark:text-slate-455 border border-slate-200 dark:border-white/10 rounded font-semibold text-[9px]">+{atsSummary.matchedKeywords.length - 5} more</span>
+                              )}
                             </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 dark:text-slate-550 italic">None matched yet. Tailor skills and experience sections.</p>
                           )}
                         </div>
-
-                        {atsSummary.suggestions.length > 0 && (
-                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
-                            <span className="text-[10px] font-black text-amber-600 dark:text-amber-300 block">Suggestions:</span>
-                            <ul className="text-[10px] text-amber-700 dark:text-amber-200 list-disc pl-4 space-y-1 font-semibold max-h-24 overflow-y-auto">
-                              {atsSummary.suggestions.map((s, i) => (
-                                <li key={i}>{s}</li>
+                        
+                        {atsSummary.missingKeywords.length > 0 && (
+                          <div>
+                            <span className="font-bold text-slate-700 dark:text-slate-400 block mb-1">Missing Keywords ({atsSummary.missingKeywords.length}):</span>
+                            <div className="flex flex-wrap gap-1">
+                              {atsSummary.missingKeywords.slice(0, 5).map((kw, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-rose-500/10 text-rose-700 dark:text-rose-455 border border-rose-500/20 rounded font-semibold text-[9px]">{kw}</span>
                               ))}
-                            </ul>
+                              {atsSummary.missingKeywords.length > 5 && (
+                                <span className="px-2 py-0.5 bg-slate-100 dark:bg-white/5 text-slate-550 dark:text-slate-455 border border-slate-200 dark:border-white/10 rounded font-semibold text-[9px]">+{atsSummary.missingKeywords.length - 5} more</span>
+                              )}
+                            </div>
                           </div>
                         )}
-                      </Card>
+                      </div>
 
-                      {/* Completion Panel */}
-                      <Card className="border border-slate-200 dark:border-white/10 shadow-sm p-6 flex flex-col items-center justify-center text-center bg-slate-50/50 dark:bg-white/5 rounded-xl space-y-4 min-h-[220px]">
-                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 animate-pulse">
-                          <CheckCircle2 className="w-6 h-6" />
+                      {atsSummary.suggestions.length > 0 && (
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
+                          <span className="text-[10px] font-black text-amber-600 dark:text-amber-300 block">Suggestions:</span>
+                          <ul className="text-[10px] text-amber-700 dark:text-amber-200 list-disc pl-4 space-y-1 font-semibold max-h-24 overflow-y-auto">
+                            {atsSummary.suggestions.map((s, i) => (
+                              <li key={i}>{s}</li>
+                            ))}
+                          </ul>
                         </div>
-                        <div className="space-y-1">
-                          <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">All Sections Completed!</h4>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-500 dark:text-slate-400 max-w-[240px]">
-                            You have filled in all the core information. Click "Finish & Export" to download your ATS-ready resume.
-                          </p>
-                        </div>
-                        
-                        <Button 
-                          onClick={() => setShowDownloadModal(true)} 
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all"
-                        >
-                          <Sparkles className="w-4 h-4 text-blue-200" />
-                          Finish & Export
-                        </Button>
-                      </Card>
-                    </div>
+                      )}
+                    </Card>
+
+                    {/* Completion Panel */}
+                    <Card className="border border-slate-200 dark:border-white/10 shadow-sm p-6 flex flex-col items-center justify-center text-center bg-slate-50/50 dark:bg-white/5 rounded-xl space-y-4 min-h-[220px]">
+                      <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 animate-pulse">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">All Sections Completed!</h4>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[240px] font-semibold">
+                          You have filled in all the core information. Click "Finish & Export" to download your ATS-ready resume.
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        onClick={() => setShowDownloadModal(true)} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all"
+                      >
+                        <Sparkles className="w-4 h-4 text-blue-200" />
+                        Finish & Export
+                      </Button>
+                    </Card>
                   </div>
                 </TabsContent>
             </Tabs>
@@ -2402,7 +2502,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             <div className="h-0.5 bg-slate-50/50 dark:bg-white/5">
               <div 
                 className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500 ease-out rounded-r-full" 
-                style={{ width: `${((WIZARD_STEPS.findIndex(s => s.key === activeEditTab) + 1) / WIZARD_STEPS.length) * 100}%` }} 
+                style={{ width: `${((activeFlowIndex + 1) / EDITOR_FLOW_STEPS.length) * 100}%` }} 
               />
             </div>
             <div className="bg-slate-100/80 dark:bg-slate-950/40 backdrop-blur-sm px-5 py-3 flex justify-between items-center">
@@ -2410,9 +2510,12 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 variant="outline"
                 disabled={activeEditTab === 'header'}
                 onClick={() => {
-                  const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
-                  if (curIdx > 0) {
-                    setActiveEditTab(WIZARD_STEPS[curIdx - 1].key);
+                  if (activeEditTab === 'preview') {
+                    setActiveEditTab('review');
+                    return;
+                  }
+                  if (activeFlowIndex > 0) {
+                    setActiveEditTab(EDITOR_FLOW_STEPS[activeFlowIndex - 1].key);
                   }
                 }}
                 className="border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-350 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white font-semibold gap-1.5 px-4 h-9 rounded-lg text-xs"
@@ -2422,38 +2525,54 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               </Button>
               
               <div className="flex items-center gap-1.5">
-                {WIZARD_STEPS.map((step, idx) => (
-                  <div 
-                    key={step.id}
-                    className={cn(
-                      "w-1.5 h-1.5 rounded-full transition-all duration-300",
-                      activeEditTab === step.key 
-                        ? "w-4 bg-blue-500" 
-                        : isStepCompleted(step.key) 
-                          ? "bg-blue-300/60" 
-                          : "bg-white/10"
-                    )}
-                  />
-                ))}
+                {activeEditTab !== 'review' && activeEditTab !== 'preview' ? (
+                  FORM_STEPS.map((step) => (
+                    <div 
+                      key={step.id}
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                        activeEditTab === step.key 
+                          ? "w-4 bg-blue-500" 
+                          : isStepCompleted(step.key) 
+                            ? "bg-blue-300/60" 
+                            : "bg-white/10"
+                      )}
+                    />
+                  ))
+                ) : (
+                  ['review', 'preview'].map((key) => (
+                    <div 
+                      key={key}
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                        key === 'preview' && "lg:hidden",
+                        activeEditTab === key 
+                          ? "w-4 bg-blue-500" 
+                          : "bg-blue-300/60"
+                      )}
+                    />
+                  ))
+                )}
               </div>
 
               <Button
                 onClick={() => {
-                  const curIdx = WIZARD_STEPS.findIndex(s => s.key === activeEditTab);
-                  if (curIdx < WIZARD_STEPS.length - 1) {
-                    setActiveEditTab(WIZARD_STEPS[curIdx + 1].key);
+                  if (isFinalFlowStep) {
+                    setShowDownloadModal(true);
+                  } else if (activeFlowIndex < EDITOR_FLOW_STEPS.length - 1) {
+                    setActiveEditTab(EDITOR_FLOW_STEPS[activeFlowIndex + 1].key);
                   } else {
                     setShowDownloadModal(true);
                   }
                 }}
                 className={cn(
                   "font-semibold gap-1.5 px-4 h-9 rounded-lg text-xs shadow-sm transition-all",
-                  activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key 
-                    ? "bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-500/20" 
+                  isFinalFlowStep 
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-755 text-white shadow-blue-500/20" 
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 )}
               >
-                {activeEditTab === WIZARD_STEPS[WIZARD_STEPS.length - 1].key ? (
+                {isFinalFlowStep ? (
                   <>
                     <Sparkles className="w-3.5 h-3.5" />
                     Finish & Export
@@ -2468,94 +2587,35 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
         </Card>
-      </div>
-      {/* RIGHT COLUMN - Live Preview */}
-      <div className={cn(
-        "col-span-12 flex flex-col gap-4 h-full transition-all duration-300",
-        showLivePreview ? "lg:col-span-5 lg:flex" : "lg:hidden",
-        previewMode === 'edit' ? "hidden lg:flex" : "flex"
-      )}>
-        {/* Toggle Mode header on mobile (hidden on desktop) */}
-        <div className="lg:hidden flex justify-between items-center bg-slate-100/80 dark:bg-slate-950/40 border border-slate-200 dark:border-white/10 rounded-xl p-3 shadow-sm backdrop-blur-sm">
-          <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as any)} className="w-full">
-            <TabsList className="grid grid-cols-2 w-48">
-              <TabsTrigger value="edit" className="gap-1.5 py-1.5 text-xs">
-                <Edit3 className="w-3.5 h-3.5" />
-                Edit Form
-              </TabsTrigger>
-              <TabsTrigger value="preview" className="gap-1.5 py-1.5 text-xs">
-                <Eye className="w-3.5 h-3.5" />
-                Live Preview
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
 
-        {/* Live Preview Card with zoom controls */}
-        <Card className="border-slate-200 dark:border-white/10 overflow-hidden flex flex-col h-[calc(100vh-210px)] bg-slate-100 dark:bg-[#131b2e] shadow-sm p-0 rounded-xl">
-          <div className="bg-slate-100/50 dark:bg-slate-950/20 border-b border-slate-200 dark:border-white/10 px-4 py-3 flex justify-between items-center shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Live Preview</span>
-              
-              {/* Quick ATS Badge */}
-              <div className="relative group cursor-pointer flex items-center gap-1.5 bg-slate-50/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-1 px-2.5 rounded-full shadow-sm hover:border-blue-400 hover:bg-blue-500/10 transition-all select-none">
-                <span className="relative flex h-2 w-2">
-                  <span className={cn(
-                    "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-                    atsSummary.score >= 70 ? "bg-blue-400" : atsSummary.score >= 40 ? "bg-amber-400" : "bg-rose-400"
-                  )}></span>
-                  <span className={cn(
-                    "relative inline-flex rounded-full h-2 w-2",
-                    atsSummary.score >= 70 ? "bg-blue-500" : atsSummary.score >= 40 ? "bg-amber-500" : "bg-rose-500"
-                  )}></span>
-                </span>
-                <span className="text-[10px] font-black text-slate-700 dark:text-slate-300">ATS: {atsSummary.score}</span>
-                
-                {/* Detailed ATS tooltip popover on hover */}
-                <div className="invisible group-hover:visible absolute top-full left-0 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/15 shadow-xl rounded-xl p-4 z-50 text-slate-750 dark:text-slate-200 transition-all text-left backdrop-blur-md">
-                  <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1 mb-2">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    ATS Optimization
-                  </h4>
-                  <div className="space-y-2 text-[10px]">
-                    <div className="flex justify-between">
-                      <span className="font-medium text-slate-500 dark:text-slate-500 dark:text-slate-400">Overall Match:</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">{atsSummary.score}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium text-slate-500 dark:text-slate-500 dark:text-slate-400">Keywords:</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">{atsSummary.matchedKeywords.length} matched</span>
-                    </div>
-                    {atsSummary.suggestions.length > 0 && (
-                      <div className="bg-amber-500/10 text-amber-200 border border-amber-500/20 rounded-lg p-2 mt-1">
-                        <span className="font-bold block mb-1">Suggestions:</span>
-                        <ul className="list-disc pl-3.5 space-y-0.5 max-h-24 overflow-y-auto font-medium">
-                          {atsSummary.suggestions.map((s, i) => (
-                            <li key={i}>{s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        <aside className="hidden lg:flex min-h-0 h-full flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-950/30 shadow-sm">
+          <div className="shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 dark:border-white/10 px-4 py-3 bg-white/55 dark:bg-white/[0.03] backdrop-blur-sm">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0">
+                <Eye className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-[15px] leading-tight">Live Preview</h3>
+                <p className="text-xs text-slate-550 dark:text-slate-455 mt-0.5 font-semibold">Updates instantly while you edit.</p>
               </div>
             </div>
-
-            <div className="flex gap-1.5 items-center">
-              <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.max(50, zoom - 10))}>
-                <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-350" />
+            <div className="flex gap-1.5 items-center shrink-0">
+              <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10" onClick={() => setZoom(Math.max(50, zoom - 10))}>
+                <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
               </Button>
-              <span className="text-[11px] text-slate-700 dark:text-slate-300 font-extrabold px-1 min-w-[32px] text-center">{zoom}%</span>
-              <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.min(150, zoom + 10))}>
-                <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-350" />
+              <span className="text-[11px] text-slate-700 dark:text-slate-300 font-extrabold px-1 min-w-[36px] text-center">{zoom}%</span>
+              <Button variant="outline" size="icon" className="h-8 w-8 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10" onClick={() => setZoom(Math.min(150, zoom + 10))}>
+                <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
               </Button>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden flex">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} />
           </div>
-        </Card>
+        </aside>
       </div>
+
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
           <Card className="w-full max-w-2xl border border-slate-200 dark:border-white/10 shadow-2xl bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-scale-up">
@@ -2563,7 +2623,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             <div className="p-6 md:p-8 flex flex-col items-center text-center relative border-b border-slate-200 dark:border-white/10">
               <button 
                 onClick={() => setShowDownloadModal(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg font-bold outline-none"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-655 dark:hover:text-white text-lg font-bold outline-none"
               >
                 ✕
               </button>
@@ -2577,7 +2637,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               </div>
               
               <h3 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">Resume Completed!</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md">
+              <p className="text-sm text-slate-550 dark:text-slate-400 mt-1 max-w-md font-semibold">
                 Your ATS-optimized resume has been generated and is ready to share.
               </p>
             </div>
@@ -2627,7 +2687,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         </span>
                       ))}
                       {atsSummary.matchedKeywords.length > 4 && (
-                        <span className="px-2.5 py-1 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded-md font-semibold text-[10px]">
+                        <span className="px-2.5 py-1 bg-slate-100 dark:bg-white/5 text-slate-550 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded-md font-semibold text-[10px]">
                           +{atsSummary.matchedKeywords.length - 4} more
                         </span>
                       )}
@@ -2677,19 +2737,17 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           </Card>
         </div>
       )}
-
       {/* Mobile Bottom Navigation Bar (Stitch Light theme compliant mockup mapped actions) */}
       <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#0f172a]/95 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 shadow-lg flex justify-around items-center py-2 px-4 pb-safe lg:hidden">
         {/* Layout/Templates button */}
         <button 
           type="button"
           onClick={() => {
-            setPreviewMode('edit');
             setActiveEditTab('layout');
           }}
           className={cn(
             "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
-            previewMode === 'edit' && activeEditTab === 'layout' 
+            activeEditTab === 'layout' 
               ? "text-blue-400 font-bold" 
               : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
           )}
@@ -2702,14 +2760,13 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         <button 
           type="button"
           onClick={() => {
-            setPreviewMode('edit');
-            if (activeEditTab === 'layout') {
+            if (activeEditTab === 'layout' || activeEditTab === 'preview' || activeEditTab === 'review') {
               setActiveEditTab('header');
             }
           }}
           className={cn(
             "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
-            previewMode === 'edit' && activeEditTab !== 'layout'
+            activeEditTab !== 'layout' && activeEditTab !== 'preview' && activeEditTab !== 'review'
               ? "text-blue-400 font-bold" 
               : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
           )}
@@ -2721,10 +2778,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         {/* Preview Button */}
         <button 
           type="button"
-          onClick={() => setPreviewMode('preview')}
+          onClick={() => setActiveEditTab('preview')}
           className={cn(
             "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
-            previewMode === 'preview'
+            activeEditTab === 'preview'
               ? "text-blue-400 font-bold" 
               : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
           )}
@@ -2736,8 +2793,13 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         {/* Export Button */}
         <button 
           type="button"
-          onClick={() => setShowDownloadModal(true)}
-          className="flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] text-slate-500 dark:text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200 transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent"
+          onClick={() => setActiveEditTab('review')}
+          className={cn(
+            "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            activeEditTab === 'review'
+              ? "text-blue-400 font-bold" 
+              : "text-slate-550 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
+          )}
         >
           <Download className="w-5 h-5" />
           <span className="text-[10px] font-semibold mt-0.5">Export</span>

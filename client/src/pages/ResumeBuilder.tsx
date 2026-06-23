@@ -249,7 +249,7 @@ export default function ResumeBuilder() {
 
       {/* Header */}
       <header className="bg-card/45 dark:bg-slate-950/40 border-b border-border dark:border-white/10 sticky top-0 z-40 shadow-sm backdrop-blur-md">
-        <div className="container max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="w-full max-w-[1880px] mx-auto px-5 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/">
               <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-350 hover:text-foreground dark:hover:text-white transition-colors">
@@ -277,9 +277,9 @@ export default function ResumeBuilder() {
       </header>
 
       {/* Main Content */}
-      <main className="container max-w-6xl mx-auto px-6 py-8 flex-grow flex flex-col">
+      <main className={`${activeResume ? 'w-full max-w-none px-3 sm:px-5 py-3' : 'container max-w-[1800px] mx-auto px-4 sm:px-6 py-6'} flex-grow flex flex-col`}>
         {activeResume ? (
-          <div className="h-[calc(100vh-180px)] flex-grow">
+          <div className="h-[calc(100vh-138px)] flex-grow w-full">
             <ResumeEditor resume={activeResume} onUpdate={handleResumeUpdate} />
           </div>
         ) : (
