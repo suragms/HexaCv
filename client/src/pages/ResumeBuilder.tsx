@@ -1,62 +1,142 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Sparkles, Upload, FileText, Linkedin, AlertTriangle, Trash2, Edit3, Lock, Plus, Target, Briefcase, ArrowRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import ResumeUploader from '@/components/ResumeUploader';
-import ResumeScratchBuilder from '@/components/ResumeScratchBuilder';
-import ResumeAIGenerator from '@/components/ResumeAIGenerator';
-import ResumeLinkedInImporter from '@/components/ResumeLinkedInImporter';
-import ResumeEditor from '@/components/ResumeEditor';
-import { Resume, ParsedResume, ResumeSection } from '@shared/types';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Briefcase,
+  CheckCircle2,
+  Edit3,
+  FileText,
+  Linkedin,
+  Lock,
+  Plus,
+  Sparkles,
+  Target,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { useResumeStorage } from '@/_core/hooks/useResumeStorage';
-import { useAuth } from '@/_core/hooks/useAuth';
 import { toast } from 'sonner';
-import { matchPresetJobByTitle } from '@/lib/jobDescriptions';
-import { ensureStandardResumeSections } from '@/lib/resumeSections';
+
+import { useAuth } from '@/_core/hooks/useAuth';
+import { useResumeStorage } from '@/_core/hooks/useResumeStorage';
+import ResumeAIGenerator from '@/components/ResumeAIGenerator';
+import ResumeEditor from '@/components/ResumeEditor';
+import ResumeLinkedInImporter from '@/components/ResumeLinkedInImporter';
+import ResumeScratchBuilder from '@/components/ResumeScratchBuilder';
+import ResumeUploader from '@/components/ResumeUploader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { matchPresetJobByTitle } from '@/lib/jobDescriptions';
+import { ensureStandardResumeSections } from '@/lib/resumeSections';
+import { cn } from '@/lib/utils';
+import { ParsedResume, Resume, ResumeSection } from '@shared/types';
+
+type BuilderMode = 'home' | 'upload' | 'scratch' | 'ai' | 'linkedin';
+
+type TargetProfile = {
+  targetRole: string;
+  experience: string;
+  market: string;
+  jobDescription: string;
+};
+
+const BUILDER_MODES: Array<{
+  mode: Exclude<BuilderMode, 'home'>;
+  title: string;
+  description: string;
+  icon: typeof Upload;
+  tone: string;
+  primary?: boolean;
+}> = [
+  {
+    mode: 'upload',
+    title: 'Upload resume',
+    description: 'Import a PDF, DOCX, or TXT file and edit the parsed result.',
+    icon: Upload,
+    tone: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-500/20',
+    primary: true,
+  },
+  {
+    mode: 'scratch',
+    title: 'Create from scratch',
+    description: 'Use guided steps to build a resume section by section.',
+    icon: FileText,
+    tone: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-300 dark:border-teal-500/20',
+    primary: true,
+  },
+  {
+    mode: 'ai',
+    title: 'Generate with AI',
+    description: 'Start with your target role, market, and keywords.',
+    icon: Sparkles,
+    tone: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-500/20',
+  },
+  {
+    mode: 'linkedin',
+    title: 'Import LinkedIn',
+    description: 'Paste profile details and convert them into a structured resume.',
+    icon: Linkedin,
+    tone: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-500/20',
+  },
+];
+
+const getModeFromLocation = (location: string): BuilderMode => {
+  const [path, queryString] = location.split('?');
+  const routeMode = path.split('/').filter(Boolean)[1];
+  if (routeMode === 'upload' || routeMode === 'scratch' || routeMode === 'ai' || routeMode === 'linkedin') {
+    return routeMode;
+  }
+
+  const queryMode = new URLSearchParams(queryString || '').get('mode');
+  if (queryMode === 'upload' || queryMode === 'scratch' || queryMode === 'ai' || queryMode === 'linkedin') {
+    return queryMode;
+  }
+
+  return 'home';
+};
+
+const marketToCountryCode = (market: string) => {
+  if (market === 'India') return 'IN';
+  if (market === 'Gulf') return 'AE';
+  if (market === 'US') return 'US';
+  if (market === 'Global') return 'GB';
+  return '';
+};
 
 export default function ResumeBuilder() {
   const { isAuthenticated } = useAuth();
   const storage = useResumeStorage();
   const [location, setLocation] = useLocation();
 
-  const [targetProfile, setTargetProfile] = useState<{
-    targetRole: string;
-    experience: string;
-    market: string;
-    jobDescription: string;
-  } | null>(null);
-
+  const mode = getModeFromLocation(location);
+  const [activeResume, setActiveResume] = useState<Resume | null>(null);
+  const [resumesList, setResumesList] = useState<Resume[]>([]);
+  const [targetProfile, setTargetProfile] = useState<TargetProfile | null>(null);
+  const [showTargetPanel, setShowTargetPanel] = useState(false);
   const [setupTargetRole, setSetupTargetRole] = useState('');
-  const [setupExperience, setSetupExperience] = useState('3–5 yrs');
+  const [setupExperience, setSetupExperience] = useState('3-5 yrs');
   const [setupMarket, setSetupMarket] = useState('Global');
   const [setupJobDescription, setSetupJobDescription] = useState('');
 
-  const [mode, setMode] = useState<'upload' | 'scratch' | 'ai' | 'linkedin'>(() => {
-    const params = new URLSearchParams(window.location.search);
-    const m = params.get('mode');
-    if (m === 'scratch' || m === 'ai' || m === 'linkedin') {
-      return m;
-    }
-    return 'upload';
-  });
-  const [activeResume, setActiveResume] = useState<Resume | null>(null);
-  const [resumesList, setResumesList] = useState<Resume[]>([]);
+  const currentModeConfig = useMemo(
+    () => BUILDER_MODES.find((item) => item.mode === mode),
+    [mode],
+  );
 
-  // Fetch resumes list on mount and when activeResume changes
   const fetchResumes = async () => {
     try {
       const list = await storage.listResumes();
       setResumesList(list);
-    } catch (e) {
-      console.error("Failed to load resumes list:", e);
+    } catch (error) {
+      console.error('Failed to load resumes list:', error);
     }
   };
 
@@ -64,23 +144,15 @@ export default function ResumeBuilder() {
     fetchResumes();
   }, [activeResume]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const m = params.get('mode');
-    if (m === 'scratch' || m === 'ai' || m === 'linkedin' || m === 'upload') {
-      setMode(m);
-      setActiveResume(null);
-    }
-  }, [location]);
+  const navigateToMode = (nextMode: BuilderMode) => {
+    setActiveResume(null);
+    setLocation(nextMode === 'home' ? '/builder' : `/builder/${nextMode}`);
+  };
 
   const createResumeFromParsed = (parsed: ParsedResume): Resume => {
-    let targetCountryCode = parsed.header?.targetCountryCode || '';
-    if (targetProfile) {
-      if (targetProfile.market === 'India') targetCountryCode = 'IN';
-      else if (targetProfile.market === 'Gulf') targetCountryCode = 'AE';
-      else if (targetProfile.market === 'US') targetCountryCode = 'US';
-      else if (targetProfile.market === 'Global') targetCountryCode = 'GB';
-    }
+    const targetCountryCode = targetProfile
+      ? marketToCountryCode(targetProfile.market)
+      : parsed.header?.targetCountryCode || '';
 
     const sections: ResumeSection[] = [
       {
@@ -99,78 +171,24 @@ export default function ResumeBuilder() {
             targetRole: targetProfile?.targetRole || parsed.header?.targetRole || parsed.header?.jobTitle || '',
             countryCode: parsed.header?.countryCode || '',
             locationFields: parsed.header?.locationFields || {},
-            targetCountryCode: targetCountryCode,
-          }
-        }
+            targetCountryCode,
+          },
+        },
       },
-      {
-        id: nanoid(),
-        type: 'summary',
-        order: 2,
-        visible: true,
-        content: { summary: parsed.summary || '' }
-      },
-      {
-        id: nanoid(),
-        type: 'skills',
-        order: 3,
-        visible: true,
-        content: { skills: parsed.skills || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'experience',
-        order: 4,
-        visible: true,
-        content: { experiences: parsed.experiences || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'projects',
-        order: 5,
-        visible: true,
-        content: { projects: parsed.projects || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'education',
-        order: 6,
-        visible: true,
-        content: { educations: parsed.educations || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'certifications',
-        order: 7,
-        visible: true,
-        content: { certifications: parsed.certifications || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'achievements',
-        order: 8,
-        visible: true,
-        content: { achievements: parsed.achievements || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'languages',
-        order: 9,
-        visible: true,
-        content: { languages: parsed.languages || [] }
-      },
-      {
-        id: nanoid(),
-        type: 'references',
-        order: 10,
-        visible: true,
-        content: { references: parsed.references || [] }
-      }
+      { id: nanoid(), type: 'summary', order: 2, visible: true, content: { summary: parsed.summary || '' } },
+      { id: nanoid(), type: 'skills', order: 3, visible: true, content: { skills: parsed.skills || [] } },
+      { id: nanoid(), type: 'experience', order: 4, visible: true, content: { experiences: parsed.experiences || [] } },
+      { id: nanoid(), type: 'projects', order: 5, visible: true, content: { projects: parsed.projects || [] } },
+      { id: nanoid(), type: 'education', order: 6, visible: true, content: { educations: parsed.educations || [] } },
+      { id: nanoid(), type: 'certifications', order: 7, visible: true, content: { certifications: parsed.certifications || [] } },
+      { id: nanoid(), type: 'achievements', order: 8, visible: true, content: { achievements: parsed.achievements || [] } },
+      { id: nanoid(), type: 'languages', order: 9, visible: true, content: { languages: parsed.languages || [] } },
+      { id: nanoid(), type: 'references', order: 10, visible: true, content: { references: parsed.references || [] } },
     ];
 
     const matchedJobId = matchPresetJobByTitle(
       targetProfile?.targetRole || parsed.header?.jobTitle,
-      targetProfile?.targetRole || parsed.header?.targetRole || parsed.header?.jobTitle
+      targetProfile?.targetRole || parsed.header?.targetRole || parsed.header?.jobTitle,
     );
 
     return ensureStandardResumeSections({
@@ -181,30 +199,22 @@ export default function ResumeBuilder() {
       jobDescriptionId: matchedJobId || undefined,
       sections,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     });
   };
 
   const handleResumeLoad = async (parsed: ParsedResume) => {
     if (!isAuthenticated && resumesList.length >= 3) {
-      toast.error("Guest limit reached! You can save a maximum of 3 resumes locally. Please sign in to save unlimited resumes.");
+      toast.error('Guest limit reached. Sign in to save unlimited resumes.');
       return;
     }
-    const newResume = createResumeFromParsed(parsed);
+
     try {
-      const saved = await storage.saveResume(newResume);
+      const saved = await storage.saveResume(createResumeFromParsed(parsed));
       setActiveResume(saved);
-      const jobTitle = parsed.header?.jobTitle;
-      const targetRole = parsed.header?.targetRole;
-      if (jobTitle || targetRole) {
-        toast.success(
-          `Resume parsed. Job title: ${jobTitle || "—"}, Target role: ${targetRole || jobTitle || "—"}`
-        );
-      } else {
-        toast.success("Draft saved successfully!");
-      }
-    } catch (e: any) {
-      toast.error("Failed to save resume: " + e.message);
+      toast.success('Resume draft is ready to edit.');
+    } catch (error: any) {
+      toast.error(`Failed to save resume: ${error.message}`);
     }
   };
 
@@ -212,352 +222,563 @@ export default function ResumeBuilder() {
     try {
       const saved = await storage.saveResume(updatedResume);
       setActiveResume(saved);
-    } catch (e: any) {
-      toast.error("Failed to save updates: " + e.message);
+    } catch (error: any) {
+      toast.error(`Failed to save updates: ${error.message}`);
     }
   };
 
-  const handleDeleteDraft = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this draft?")) return;
+  const handleDeleteDraft = async (id: string, event: MouseEvent) => {
+    event.stopPropagation();
+    if (!window.confirm('Delete this draft?')) return;
+
     try {
       await storage.deleteResume(id);
-      toast.success("Draft deleted.");
+      toast.success('Draft deleted.');
       fetchResumes();
-    } catch (err) {
-      toast.error("Failed to delete draft.");
+    } catch {
+      toast.error('Failed to delete draft.');
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans glass-bg">
-      {/* Guest Mode Alert Banner */}
-      {!isAuthenticated && activeResume && (
-        <div className="bg-amber-500/10 dark:bg-amber-500/5 backdrop-blur-md text-amber-800 dark:text-amber-250 px-4 py-2 text-center text-xs font-semibold shadow-xs flex items-center justify-center gap-2 relative z-50 animate-fade-in border-b border-amber-500/20">
-          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-pulse" />
-          <span>Working as Guest: Your resumes are saved locally to this browser.</span>
-          <Button 
-            size="sm" 
-            onClick={() => setLocation("/login?convert=true")}
-            className="ml-3 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-400 text-white font-bold py-1 px-3 text-xs shadow-xs rounded-lg h-7 transition-colors border-none cursor-pointer"
-          >
-            <Lock className="w-3 h-3 mr-1" />
-            Save to Account
-          </Button>
-        </div>
-      )}
+  const saveTargetProfile = () => {
+    if (!setupTargetRole.trim()) {
+      toast.error('Enter a target job title first.');
+      return;
+    }
 
-      {/* Header */}
-      <header className="bg-card/45 dark:bg-slate-950/40 border-b border-border dark:border-white/10 sticky top-0 z-40 shadow-sm backdrop-blur-md">
-        <div className="w-full max-w-[1880px] mx-auto px-5 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-350 hover:text-foreground dark:hover:text-white transition-colors">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <div className="flex items-center gap-3">
-              <img src="/icon-192.png" alt="HexaCv Logo" className="w-9 h-9 object-contain" />
-              <div>
-                <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">HexaCv Resume Builder</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Build your ATS-friendly resume</p>
-              </div>
-            </div>
-          </div>
-          {activeResume && (
+    setTargetProfile({
+      targetRole: setupTargetRole.trim(),
+      experience: setupExperience,
+      market: setupMarket,
+      jobDescription: setupJobDescription,
+    });
+    setShowTargetPanel(false);
+    toast.success('Target profile saved.');
+  };
+
+  const startTargetEdit = () => {
+    setSetupTargetRole(targetProfile?.targetRole || setupTargetRole);
+    setSetupExperience(targetProfile?.experience || setupExperience);
+    setSetupMarket(targetProfile?.market || setupMarket);
+    setSetupJobDescription(targetProfile?.jobDescription || setupJobDescription);
+    setShowTargetPanel(true);
+  };
+
+  if (activeResume) {
+    return (
+      <div className="min-h-screen bg-background text-foreground font-sans glass-bg">
+        {!isAuthenticated && (
+          <GuestBanner onSignIn={() => setLocation('/login?convert=true')} />
+        )}
+        <BuilderHeader
+          modeTitle="Live editor"
+          onBack={() => {
+            setActiveResume(null);
+            navigateToMode('home');
+          }}
+          action={
             <Button
               variant="outline"
-              onClick={() => setActiveResume(null)}
-              className="border-border dark:border-white/10 text-foreground dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 font-medium rounded-lg text-sm transition-colors bg-card dark:bg-white/5"
+              onClick={() => {
+                setActiveResume(null);
+                navigateToMode('home');
+              }}
+              className="hidden sm:inline-flex h-9 rounded-lg bg-white/80 text-xs font-bold dark:bg-white/5"
             >
-              Start New / View Drafts
+              View drafts
             </Button>
-          )}
-        </div>
-      </header>
+          }
+        />
+        <main className="h-[calc(100vh-64px)] w-full px-2 py-2 sm:px-4 sm:py-3">
+          <ResumeEditor resume={activeResume} onUpdate={handleResumeUpdate} />
+        </main>
+      </div>
+    );
+  }
 
-      {/* Main Content */}
-      <main className={`${activeResume ? 'w-full max-w-none px-3 sm:px-5 py-3' : 'container max-w-[1800px] mx-auto px-4 sm:px-6 py-6'} flex-grow flex flex-col`}>
-        {activeResume ? (
-          <div className="h-[calc(100vh-138px)] flex-grow w-full">
-            <ResumeEditor resume={activeResume} onUpdate={handleResumeUpdate} />
-          </div>
-        ) : (
-          <div className="space-y-8 w-full animate-fade-slide-up">
-            {/* Guest limit reminder */}
-             {!isAuthenticated && resumesList.length > 0 && (
-              <Card className="border border-amber-500/20 bg-amber-500/5 rounded-2xl shadow-sm backdrop-blur-sm">
-                <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-800 dark:text-amber-200 text-sm">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <span>You have used <strong className="font-extrabold">{resumesList.length}/3</strong> guest resume slots. Sign in to unlock unlimited cloud storage.</span>
-                  </div>
-                  <Link href="/login">
-                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-850 dark:text-amber-100 hover:bg-amber-500/10 dark:hover:bg-amber-500/20 text-xs font-bold rounded-lg shrink-0 bg-transparent">
-                      Sign In / Create Account
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
+  return (
+    <div className="min-h-screen bg-background text-foreground font-sans glass-bg">
+      {!isAuthenticated && resumesList.length > 0 && (
+        <GuestBanner onSignIn={() => setLocation('/login?convert=true')} />
+      )}
 
-            {/* List of drafts */}
-            {resumesList.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider pl-1">Your Saved Drafts</h3>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {resumesList.map((r) => (
-                    <Card 
-                      key={r.id} 
-                      onClick={() => setActiveResume(r)}
-                      className="glass-panel cursor-pointer hover:shadow-md hover:border-primary/45 transition-all dark:bg-slate-900/20 flex flex-col justify-between rounded-xl overflow-hidden group"
-                    >
-                      <CardHeader className="pb-3 pt-5 px-5">
-                        <CardTitle className="text-base text-slate-800 dark:text-slate-200 font-bold truncate group-hover:text-primary transition-colors">{r.title}</CardTitle>
-                        <CardDescription className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Last edited: {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : "unknown"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardFooter className="pt-2.5 pb-3 px-5 border-t border-border dark:border-white/10 bg-slate-100/50 dark:bg-slate-950/20 flex justify-between items-center">
-                        <Badge variant="outline" className="text-[10px] bg-slate-55 dark:bg-white/5 border-border dark:border-white/10 text-slate-650 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-md">
-                          {r.userId === 'guest' ? 'Local Storage' : 'Cloud Sync'}
-                        </Badge>
-                        <div className="flex gap-1">
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            className="text-slate-550 hover:text-foreground dark:text-slate-400 dark:hover:text-slate-200 p-1.5 h-8 w-8 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveResume(r);
-                            }}
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-500/10 p-1.5 h-8 w-8 rounded-lg transition-all"
-                            onClick={(e) => handleDeleteDraft(r.id, e)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </CardFooter>
-                    </Card>
+      <BuilderHeader
+        modeTitle={currentModeConfig?.title || 'Resume editor'}
+        onBack={() => (mode === 'home' ? setLocation('/') : navigateToMode('home'))}
+        action={
+          <Button
+            variant="outline"
+            onClick={startTargetEdit}
+            className="h-9 rounded-lg bg-white/80 px-3 text-xs font-bold dark:bg-white/5"
+          >
+            <Target className="mr-1.5 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{targetProfile ? 'Edit target' : 'Add target'}</span>
+            <span className="sm:hidden">Target</span>
+          </Button>
+        }
+      />
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-5 sm:px-6 lg:px-8">
+        {mode === 'home' ? (
+          <>
+            <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr] lg:items-stretch">
+              <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-900/30 sm:p-7">
+                <Badge variant="outline" className="mb-4 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                  ATS friendly builder
+                </Badge>
+                <h1 className="max-w-2xl text-3xl font-extrabold leading-tight tracking-normal text-slate-950 dark:text-slate-50 sm:text-4xl">
+                  Build, edit, and export your resume from your phone.
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-350 sm:text-base">
+                  Upload an existing resume or start clean with a guided editor. Every page is designed for quick thumb-friendly edits, preview, and export.
+                </p>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {BUILDER_MODES.filter((item) => item.primary).map((item) => (
+                    <ModeCard key={item.mode} item={item} onClick={() => navigateToMode(item.mode)} />
                   ))}
-                  {!isAuthenticated && resumesList.length < 3 && (
-                    <Card 
-                      onClick={() => setMode('scratch')}
-                      className="border border-dashed border-slate-300 dark:border-white/20 hover:border-blue-400/50 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer flex flex-col items-center justify-center p-6 text-center transition-all rounded-xl min-h-[125px] group bg-slate-50/50 dark:bg-slate-900/10"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 mb-2 group-hover:bg-slate-200 dark:group-hover:bg-white/10 group-hover:text-primary transition-colors border border-slate-200 dark:border-white/10">
-                        <Plus className="w-5 h-5" />
-                      </div>
-                      <span className="text-sm font-bold text-slate-600 dark:text-slate-350 group-hover:text-primary dark:group-hover:text-white transition-colors">Create Another Resume</span>
-                      <span className="text-xs text-slate-550 dark:text-slate-500 mt-1">({3 - resumesList.length} slots remaining)</span>
-                    </Card>
-                  )}
                 </div>
               </div>
-            )}
-                      {/* Target Profile Setup or Creation Tabs */}
-            {targetProfile && (
-              <Card className="border border-blue-500/20 bg-blue-500/5 rounded-2xl shadow-sm backdrop-blur-sm animate-fade-slide-up">
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-sm text-slate-800 dark:text-slate-200">
-                  <div className="flex items-center gap-3">
-                    <Target className="w-5 h-5 text-blue-500 shrink-0 animate-pulse" />
-                    <div>
-                      <div className="font-bold flex items-center gap-2">
-                        Targeting: <span className="text-blue-600 dark:text-blue-400">{targetProfile.targetRole}</span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Experience: <span className="font-semibold text-slate-700 dark:text-slate-350">{targetProfile.experience}</span> &middot; Market: <span className="font-semibold text-slate-700 dark:text-slate-350">{targetProfile.market}</span>
-                        {targetProfile.jobDescription && " &middot; Job Description Provided"}
-                      </p>
-                    </div>
-                  </div>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => {
-                      setSetupTargetRole(targetProfile.targetRole);
-                      setSetupExperience(targetProfile.experience);
-                      setSetupMarket(targetProfile.market);
-                      setSetupJobDescription(targetProfile.jobDescription);
-                      setTargetProfile(null);
-                    }}
-                    className="border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-250 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-bold rounded-lg shrink-0 bg-transparent cursor-pointer"
-                  >
-                    Change Target Settings
-                  </Button>
-                </CardContent>
-              </Card>
+              <TargetSummary targetProfile={targetProfile} onEdit={startTargetEdit} />
+            </section>
+
+            {showTargetPanel && (
+              <TargetPanel
+                setupTargetRole={setupTargetRole}
+                setupExperience={setupExperience}
+                setupMarket={setupMarket}
+                setupJobDescription={setupJobDescription}
+                onRoleChange={setSetupTargetRole}
+                onExperienceChange={setSetupExperience}
+                onMarketChange={setSetupMarket}
+                onJobDescriptionChange={setSetupJobDescription}
+                onCancel={() => setShowTargetPanel(false)}
+                onSave={saveTargetProfile}
+              />
             )}
 
-            {!targetProfile ? (
-              <Card className="glass-panel rounded-2xl overflow-hidden dark:bg-slate-900/20 border-slate-200 dark:border-white/10 shadow-lg animate-fade-slide-up">
-                <CardHeader className="bg-slate-50/50 dark:bg-slate-950/20 border-b border-slate-200 dark:border-white/10 p-6">
-                  <CardTitle className="flex items-center gap-2.5 font-extrabold text-slate-900 dark:text-slate-100 text-xl">
-                    <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    Configure Target Profile
-                  </CardTitle>
-                  <CardDescription className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                    Specify your target preferences to unlock the builder. This configures ATS optimizations and prefills your resume.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 sm:p-8 space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="setup-target-role" className="font-bold text-slate-700 dark:text-slate-350 text-xs uppercase tracking-wider pl-1">Target Job Title *</Label>
-                    <Input
-                      id="setup-target-role"
-                      placeholder="e.g. Generative AI Engineer"
-                      value={setupTargetRole}
-                      onChange={(e) => setSetupTargetRole(e.target.value)}
-                      className="rounded-xl border-slate-200 dark:border-white/10 py-5 text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus-visible:ring-blue-500 shadow-xs"
-                    />
+            <section className="grid gap-5 lg:grid-cols-[1fr_360px] lg:items-start">
+              <DraftsList
+                resumesList={resumesList}
+                isAuthenticated={isAuthenticated}
+                onOpen={setActiveResume}
+                onDelete={handleDeleteDraft}
+                onCreate={() => navigateToMode('scratch')}
+              />
+              <div className="grid gap-3">
+                {BUILDER_MODES.filter((item) => !item.primary).map((item) => (
+                  <ModeCard key={item.mode} item={item} compact onClick={() => navigateToMode(item.mode)} />
+                ))}
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="space-y-5">
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-900/30 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                {currentModeConfig && (
+                  <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border', currentModeConfig.tone)}>
+                    <currentModeConfig.icon className="h-5 w-5" />
                   </div>
+                )}
+                <div>
+                  <h1 className="text-xl font-extrabold text-slate-950 dark:text-slate-50">{currentModeConfig?.title}</h1>
+                  <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-350">{currentModeConfig?.description}</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => navigateToMode('home')} className="h-10 rounded-lg bg-white/70 text-sm font-bold dark:bg-white/5">
+                Choose another option
+              </Button>
+            </div>
 
-                  <div className="space-y-3">
-                    <Label className="font-bold text-slate-700 dark:text-slate-350 text-xs uppercase tracking-wider pl-1">Experience Level *</Label>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                      {['Fresher', '1–3 yrs', '3–5 yrs', '5–8 yrs', '8+ yrs'].map((exp) => {
-                        const isSelected = setupExperience === exp;
-                        return (
-                          <button
-                            key={exp}
-                            type="button"
-                            onClick={() => setSetupExperience(exp)}
-                            className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all duration-200 flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                              isSelected
-                                ? 'border-blue-600 bg-blue-500/5 text-blue-600 dark:text-blue-400 shadow-xs scale-[1.02]'
-                                : 'border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'
-                            }`}
-                          >
-                            <span>{exp}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="font-bold text-slate-700 dark:text-slate-350 text-xs uppercase tracking-wider pl-1">Target Market *</Label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {[
-                        { value: 'India', label: 'India', flag: '🇮🇳' },
-                        { value: 'Gulf', label: 'Gulf', flag: '🇦🇪' },
-                        { value: 'US', label: 'US', flag: '🇺🇸' },
-                        { value: 'Global', label: 'Global', flag: '🌐' }
-                      ].map((item) => {
-                        const isSelected = setupMarket === item.value;
-                        return (
-                          <button
-                            key={item.value}
-                            type="button"
-                            onClick={() => setSetupMarket(item.value)}
-                            className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                              isSelected
-                                ? 'border-blue-600 bg-blue-500/5 text-blue-600 dark:text-blue-400 shadow-xs scale-[1.02]'
-                                : 'border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-550 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'
-                            }`}
-                          >
-                            <span className="text-xl">{item.flag}</span>
-                            <span>{item.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="setup-job-desc" className="font-bold text-slate-700 dark:text-slate-350 text-xs uppercase tracking-wider pl-1">Job Description (optional)</Label>
-                    <Textarea
-                      id="setup-job-desc"
-                      placeholder="Paste the job description or core keywords you want to target (this matches ATS requirements)..."
-                      value={setupJobDescription}
-                      onChange={(e) => setSetupJobDescription(e.target.value)}
-                      rows={5}
-                      className="rounded-xl border-slate-200 dark:border-white/10 p-3 leading-relaxed text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus-visible:ring-blue-500 shadow-xs"
-                    />
-                  </div>
-
-                  <Button
-                    onClick={() => {
-                      if (!setupTargetRole.trim()) {
-                        toast.error('Please enter a target job title.');
-                        return;
-                      }
-                      setTargetProfile({
-                        targetRole: setupTargetRole,
-                        experience: setupExperience,
-                        market: setupMarket,
-                        jobDescription: setupJobDescription
-                      });
-                      toast.success("Target profile configured!");
-                    }}
-                    className="bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-755 text-white font-bold py-5 rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-98 transition-all duration-200 flex items-center justify-center gap-2 w-full text-sm border-none cursor-pointer"
-                  >
-                    Proceed to Builder Modes
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </CardContent>
-              </Card>
+            {targetProfile ? (
+              <TargetSummary targetProfile={targetProfile} onEdit={startTargetEdit} inline />
             ) : (
-              <Card className="glass-panel rounded-2xl overflow-hidden dark:bg-slate-900/20 border-slate-200 dark:border-white/10 shadow-lg animate-fade-slide-up">
-                <div className="border-b border-slate-200 dark:border-white/10 px-6 py-5 bg-slate-50/50 dark:bg-slate-950/20">
-                  <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">
-                    <TabsList className="grid w-full max-w-2xl grid-cols-4 bg-slate-100/80 dark:bg-slate-950/40 p-1 rounded-xl border border-slate-200 dark:border-white/10">
-                      <TabsTrigger value="upload" className="gap-2 text-slate-500 dark:text-slate-400 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
-                        <Upload className="w-4 h-4 shrink-0" />
-                        Upload Resume
-                      </TabsTrigger>
-                      <TabsTrigger value="scratch" className="gap-2 text-slate-500 dark:text-slate-400 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
-                        <FileText className="w-4 h-4 shrink-0" />
-                        Build Scratch
-                      </TabsTrigger>
-                      <TabsTrigger value="ai" className="gap-2 text-slate-500 dark:text-slate-400 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
-                        <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        Auto Generate
-                      </TabsTrigger>
-                      <TabsTrigger value="linkedin" className="gap-2 text-slate-500 dark:text-slate-400 font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:text-primary dark:data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all text-xs sm:text-sm">
-                        <Linkedin className="w-4 h-4 text-blue-600 dark:text-blue-400 fill-current shrink-0" />
-                        LinkedIn Import
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-
-                <div className="p-8">
-                  {mode === 'upload' && <ResumeUploader onParsed={handleResumeLoad} onStartFromScratch={() => setMode('scratch')} />}
-                  {mode === 'scratch' && (
-                    <ResumeScratchBuilder 
-                      onComplete={handleResumeLoad} 
-                      prefilledRole={targetProfile.targetRole}
-                      prefilledCountryCode={
-                        targetProfile.market === 'India' ? 'IN' : 
-                        targetProfile.market === 'Gulf' ? 'AE' : 
-                        targetProfile.market === 'US' ? 'US' : 
-                        targetProfile.market === 'Global' ? 'GB' : ''
-                      }
-                    />
-                  )}
-                  {mode === 'ai' && (
-                    <ResumeAIGenerator 
-                      onGenerated={handleResumeLoad} 
-                      prefilledRole={targetProfile.targetRole}
-                      prefilledExperience={targetProfile.experience}
-                      prefilledMarket={targetProfile.market}
-                      prefilledJobDescription={targetProfile.jobDescription}
-                    />
-                  )}
-                  {mode === 'linkedin' && <ResumeLinkedInImporter onImported={handleResumeLoad} />}
-                </div>
-              </Card>
+              <button
+                type="button"
+                onClick={startTargetEdit}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-blue-300 bg-blue-50/70 p-4 text-left text-blue-800 transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-blue-950/25 dark:text-blue-200"
+              >
+                <span className="flex items-center gap-3 text-sm font-bold">
+                  <Target className="h-4 w-4" />
+                  Add target role for better ATS matching
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0" />
+              </button>
             )}
-          </div>
+
+            {showTargetPanel && (
+              <TargetPanel
+                setupTargetRole={setupTargetRole}
+                setupExperience={setupExperience}
+                setupMarket={setupMarket}
+                setupJobDescription={setupJobDescription}
+                onRoleChange={setSetupTargetRole}
+                onExperienceChange={setSetupExperience}
+                onMarketChange={setSetupMarket}
+                onJobDescriptionChange={setSetupJobDescription}
+                onCancel={() => setShowTargetPanel(false)}
+                onSave={saveTargetProfile}
+              />
+            )}
+
+            <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white/85 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/35">
+              <CardContent className="p-4 sm:p-6 lg:p-8">
+                {mode === 'upload' && (
+                  <ResumeUploader onParsed={handleResumeLoad} onStartFromScratch={() => navigateToMode('scratch')} />
+                )}
+                {mode === 'scratch' && (
+                  <ResumeScratchBuilder
+                    onComplete={handleResumeLoad}
+                    prefilledRole={targetProfile?.targetRole}
+                    prefilledCountryCode={targetProfile ? marketToCountryCode(targetProfile.market) : ''}
+                  />
+                )}
+                {mode === 'ai' && (
+                  <ResumeAIGenerator
+                    onGenerated={handleResumeLoad}
+                    prefilledRole={targetProfile?.targetRole || ''}
+                    prefilledExperience={targetProfile?.experience || setupExperience}
+                    prefilledMarket={targetProfile?.market || setupMarket}
+                    prefilledJobDescription={targetProfile?.jobDescription || setupJobDescription}
+                  />
+                )}
+                {mode === 'linkedin' && <ResumeLinkedInImporter onImported={handleResumeLoad} />}
+              </CardContent>
+            </Card>
+          </section>
         )}
       </main>
+
+      {mode === 'home' && (
+        <nav className="fixed bottom-0 left-0 z-40 grid w-full grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-950/95 sm:hidden">
+          <Button onClick={() => navigateToMode('upload')} className="h-12 rounded-xl font-bold">
+            <Upload className="mr-2 h-4 w-4" />
+            Upload
+          </Button>
+          <Button variant="outline" onClick={() => navigateToMode('scratch')} className="h-12 rounded-xl bg-white font-bold dark:bg-white/5">
+            <Plus className="mr-2 h-4 w-4" />
+            Create
+          </Button>
+        </nav>
+      )}
     </div>
+  );
+}
+
+function BuilderHeader({
+  modeTitle,
+  onBack,
+  action,
+}: {
+  modeTitle: string;
+  onBack: () => void;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={onBack} className="h-10 w-10 shrink-0 rounded-full">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <img src="/icon-192.png" alt="HexaCv Logo" className="h-9 w-9 shrink-0 object-contain" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-extrabold text-slate-950 dark:text-slate-50">HexaCv</p>
+            <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{modeTitle}</p>
+          </div>
+        </div>
+        {action}
+      </div>
+    </header>
+  );
+}
+
+function GuestBanner({ onSignIn }: { onSignIn: () => void }) {
+  return (
+    <div className="relative z-40 flex items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+      <span className="min-w-0">Guest drafts are saved on this device.</span>
+      <Button size="sm" onClick={onSignIn} className="h-7 rounded-lg bg-amber-600 px-2 text-[11px] text-white hover:bg-amber-700">
+        <Lock className="mr-1 h-3 w-3" />
+        Sign in
+      </Button>
+    </div>
+  );
+}
+
+function ModeCard({
+  item,
+  compact = false,
+  onClick,
+}: {
+  item: (typeof BUILDER_MODES)[number];
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white/80 p-4 text-left shadow-sm transition hover:border-blue-300 hover:bg-white hover:shadow-md dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+        compact ? 'min-h-[104px]' : 'min-h-[132px]',
+      )}
+    >
+      <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border', item.tone)}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">{item.title}</h3>
+        <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-400">{item.description}</p>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-blue-600" />
+    </button>
+  );
+}
+
+function TargetSummary({
+  targetProfile,
+  onEdit,
+  inline = false,
+}: {
+  targetProfile: TargetProfile | null;
+  onEdit: () => void;
+  inline?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-900/30',
+        inline && 'rounded-xl p-4',
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-950/40 dark:text-blue-300">
+            <Target className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+              {targetProfile ? targetProfile.targetRole : 'Target profile'}
+            </h2>
+            <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-400">
+              {targetProfile
+                ? `${targetProfile.experience} · ${targetProfile.market}${targetProfile.jobDescription ? ' · job description added' : ''}`
+                : 'Optional, but useful for ATS keywords and regional formatting.'}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={onEdit} className="shrink-0 rounded-lg bg-white/80 text-xs font-bold dark:bg-white/5">
+          {targetProfile ? 'Edit' : 'Add'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TargetPanel({
+  setupTargetRole,
+  setupExperience,
+  setupMarket,
+  setupJobDescription,
+  onRoleChange,
+  onExperienceChange,
+  onMarketChange,
+  onJobDescriptionChange,
+  onCancel,
+  onSave,
+}: {
+  setupTargetRole: string;
+  setupExperience: string;
+  setupMarket: string;
+  setupJobDescription: string;
+  onRoleChange: (value: string) => void;
+  onExperienceChange: (value: string) => void;
+  onMarketChange: (value: string) => void;
+  onJobDescriptionChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <Card className="rounded-2xl border-blue-200 bg-white/90 shadow-md backdrop-blur dark:border-blue-500/20 dark:bg-slate-900/60">
+      <CardHeader className="p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg font-extrabold">
+          <Briefcase className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+          Target settings
+        </CardTitle>
+        <CardDescription>Use this to tune resume wording, ATS keywords, and market-specific fields.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 p-5 pt-2">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="setup-target-role" className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-350">
+              Target job title
+            </Label>
+            <Input
+              id="setup-target-role"
+              placeholder="Generative AI Engineer"
+              value={setupTargetRole}
+              onChange={(event) => onRoleChange(event.target.value)}
+              className="h-11 rounded-lg bg-white dark:bg-slate-950"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-350">Target market</Label>
+            <Select value={setupMarket} onValueChange={onMarketChange}>
+              <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-slate-950">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['Global', 'India', 'Gulf', 'US'].map((market) => (
+                  <SelectItem key={market} value={market}>
+                    {market}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-350">Experience level</Label>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {['Fresher', '1-3 yrs', '3-5 yrs', '5-8 yrs', '8+ yrs'].map((experience) => (
+              <button
+                key={experience}
+                type="button"
+                onClick={() => onExperienceChange(experience)}
+                className={cn(
+                  'min-h-11 rounded-lg border px-3 text-xs font-extrabold transition',
+                  setupExperience === experience
+                    ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-350 dark:hover:bg-white/10',
+                )}
+              >
+                {experience}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="setup-job-desc" className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-350">
+            Job description or keywords
+          </Label>
+          <Textarea
+            id="setup-job-desc"
+            placeholder="Paste the job description, tools, or skills you want this resume to target."
+            value={setupJobDescription}
+            onChange={(event) => onJobDescriptionChange(event.target.value)}
+            rows={4}
+            className="rounded-lg bg-white text-sm leading-6 dark:bg-slate-950"
+          />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <div />
+          <Button variant="outline" onClick={onCancel} className="h-11 rounded-lg bg-white font-bold dark:bg-white/5">
+            Cancel
+          </Button>
+          <Button onClick={onSave} className="h-11 rounded-lg font-bold">
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Save target
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DraftsList({
+  resumesList,
+  isAuthenticated,
+  onOpen,
+  onDelete,
+  onCreate,
+}: {
+  resumesList: Resume[];
+  isAuthenticated: boolean;
+  onOpen: (resume: Resume) => void;
+  onDelete: (id: string, event: MouseEvent) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-extrabold text-slate-950 dark:text-slate-50">Saved drafts</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {resumesList.length ? 'Continue editing a resume.' : 'Your created resumes will appear here.'}
+          </p>
+        </div>
+        <Button variant="outline" onClick={onCreate} className="hidden rounded-lg bg-white/80 text-xs font-bold dark:bg-white/5 sm:inline-flex">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          New
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {resumesList.map((resume) => (
+          <Card
+            key={resume.id}
+            onClick={() => onOpen(resume)}
+            className="group cursor-pointer overflow-hidden rounded-xl border-slate-200 bg-white/85 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-white/10 dark:bg-white/5"
+          >
+            <CardHeader className="p-4 pb-3">
+              <CardTitle className="truncate text-base font-extrabold text-slate-900 transition group-hover:text-blue-700 dark:text-slate-100 dark:group-hover:text-blue-300">
+                {resume.title}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Last edited {resume.updatedAt ? new Date(resume.updatedAt).toLocaleDateString() : 'recently'}
+              </CardDescription>
+            </CardHeader>
+            <CardFooter className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-950/20">
+              <Badge variant="outline" className="rounded-md bg-white text-[10px] font-bold dark:bg-white/5">
+                {resume.userId === 'guest' || !isAuthenticated ? 'Local draft' : 'Cloud sync'}
+              </Badge>
+              <div className="flex gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpen(resume);
+                  }}
+                  className="h-8 w-8 rounded-lg"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(event) => onDelete(resume.id, event)}
+                  className="h-8 w-8 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardFooter>
+          </Card>
+        ))}
+
+        {resumesList.length === 0 && (
+          <button
+            type="button"
+            onClick={onCreate}
+            className="flex min-h-[160px] w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white/70 p-6 text-center transition hover:border-blue-300 hover:bg-white dark:border-white/15 dark:bg-white/5 dark:hover:bg-white/10 sm:col-span-2"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+              <Plus className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-extrabold text-slate-900 dark:text-slate-100">Create your first resume</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Start from scratch with the guided editor.</p>
+            </div>
+          </button>
+        )}
+      </div>
+    </section>
   );
 }

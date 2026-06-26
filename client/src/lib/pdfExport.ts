@@ -6,24 +6,37 @@ import { Resume } from '@shared/types';
  * For now, this is a placeholder that uses browser print functionality
  */
 export async function exportResumeToPDF(resumeElement: HTMLElement, fileName: string = 'resume.pdf') {
+  const originalZoom = resumeElement.style.zoom;
+  let captureHost: HTMLDivElement | null = null;
   try {
-    // Temporarily reset CSS zoom if applied to ensure html2canvas captures at standard 100% resolution
-    const originalZoom = resumeElement.style.zoom;
-    resumeElement.style.zoom = '1';
-
     const { jsPDF } = await import('jspdf');
     const html2canvas = (await import('html2canvas')).default;
 
+    // Capture a temporary clone at normal coordinates; very large offscreen positions can stall html2canvas.
+    captureHost = document.createElement('div');
+    captureHost.style.position = 'fixed';
+    captureHost.style.left = '0';
+    captureHost.style.top = '0';
+    captureHost.style.width = '210mm';
+    captureHost.style.minHeight = '297mm';
+    captureHost.style.pointerEvents = 'none';
+    captureHost.style.zIndex = '-1';
+    captureHost.style.background = '#ffffff';
+
+    const captureElement = resumeElement.cloneNode(true) as HTMLElement;
+    captureElement.removeAttribute('id');
+    captureElement.style.zoom = '1';
+    captureElement.style.transform = 'none';
+    captureHost.appendChild(captureElement);
+    document.body.appendChild(captureHost);
+
     // Render HTML to canvas
-    const canvas = await html2canvas(resumeElement, {
+    const canvas = await html2canvas(captureElement, {
       scale: 2, // High resolution scaling
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
     });
-
-    // Restore the original zoom
-    resumeElement.style.zoom = originalZoom;
 
     // Create PDF from canvas
     const imgData = canvas.toDataURL('image/png');
@@ -55,12 +68,14 @@ export async function exportResumeToPDF(resumeElement: HTMLElement, fileName: st
       heightLeft -= pageHeight;
     }
 
-    // Save the file directly, triggering download
-    pdf.save(fileName);
+    downloadBlob(pdf.output('blob') as Blob, fileName);
   } catch (error) {
     console.error('Failed to export PDF:', error);
     // Fallback to print window if canvas rendering fails
     window.print();
+  } finally {
+    resumeElement.style.zoom = originalZoom;
+    captureHost?.remove();
   }
 }
 
@@ -184,10 +199,12 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
+  link.rel = 'noopener';
+  link.style.display = 'none';
   document.body.appendChild(link);
-  link.click();
+  link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**

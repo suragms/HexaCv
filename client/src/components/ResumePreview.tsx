@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type Ref } from 'react';
 import { Resume } from '@shared/types';
 import { cn } from '@/lib/utils';
 
@@ -6,6 +6,8 @@ interface ResumePreviewProps {
   resume: Resume;
   templateId?: string; // Kept for compatibility, ignored in rendering
   zoom?: number;
+  contentRef?: Ref<HTMLDivElement>;
+  contentId?: string;
 }
 
 function formatDateForResume(dateStr: string, dateFormat: string): string {
@@ -57,7 +59,7 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps) {
+export default function ResumePreview({ resume, zoom = 100, contentRef, contentId = 'resume-pdf-content' }: ResumePreviewProps) {
   const [countriesList, setCountriesList] = useState<any[]>([]);
 
   useEffect(() => {
@@ -136,11 +138,12 @@ export default function ResumePreview({ resume, zoom = 100 }: ResumePreviewProps
   const portfolio = header.links?.find((l: any) => l.label.toLowerCase().includes('portfolio') || l.label.toLowerCase().includes('website'))?.url || '';
 
   return (
-    <div className="w-full bg-slate-100 p-4 overflow-auto flex justify-center items-start">
+    <div className="w-full h-full bg-slate-100 p-2 sm:p-4 overflow-auto flex justify-center items-start">
       <div
-        id="resume-pdf-content"
+        id={contentId}
+        ref={contentRef}
         className={cn(
-          "bg-white shadow-xl w-[210mm] min-h-[297mm] text-slate-800 flex flex-col p-10"
+          "bg-white shadow-xl w-[210mm] min-h-[297mm] text-slate-800 flex flex-col p-10 origin-top"
         )}
         style={{
           zoom: zoom / 100,

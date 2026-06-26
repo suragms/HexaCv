@@ -18,6 +18,10 @@ function Router() {
       <Route path={"/"} component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/builder/upload" component={ResumeBuilder} />
+      <Route path="/builder/scratch" component={ResumeBuilder} />
+      <Route path="/builder/ai" component={ResumeBuilder} />
+      <Route path="/builder/linkedin" component={ResumeBuilder} />
       <Route path="/builder" component={ResumeBuilder} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/dashboard/:sub*" component={Dashboard} />

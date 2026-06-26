@@ -4,7 +4,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react';
+import {
+  AlignLeft,
+  Award,
+  Briefcase,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Code,
+  FileText,
+  Folder,
+  Globe,
+  GraduationCap,
+  LayoutList,
+  Plus,
+  Trophy,
+  Trash2,
+  User,
+  Users,
+} from 'lucide-react';
 import { ParsedResume, Experience, Project, Education, Certification, SkillCategory } from '@shared/types';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
@@ -50,18 +68,18 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
   const [customSections, setCustomSections] = useState<any[]>([]);
 
   const steps = [
-    { id: 'header', label: 'Header', icon: '👤' },
-    { id: 'summary', label: 'Summary', icon: '📝' },
-    { id: 'skills', label: 'Skills', icon: '⭐' },
-    { id: 'experience', label: 'Experience', icon: '💼' },
-    { id: 'projects', label: 'Projects', icon: '🚀' },
-    { id: 'education', label: 'Education', icon: '🎓' },
-    { id: 'certifications', label: 'Certifications', icon: '📜' },
-    { id: 'achievements', label: 'Achievements', icon: '🏆' },
-    { id: 'languages', label: 'Languages', icon: '🌐' },
-    { id: 'references', label: 'References', icon: '👥' },
-    { id: 'custom', label: 'Custom', icon: '⚙️' },
-    { id: 'review', label: 'Review', icon: '✓' },
+    { id: 'header', label: 'Header', icon: User },
+    { id: 'summary', label: 'Summary', icon: AlignLeft },
+    { id: 'skills', label: 'Skills', icon: Code },
+    { id: 'experience', label: 'Experience', icon: Briefcase },
+    { id: 'projects', label: 'Projects', icon: Folder },
+    { id: 'education', label: 'Education', icon: GraduationCap },
+    { id: 'certifications', label: 'Certifications', icon: Award },
+    { id: 'achievements', label: 'Achievements', icon: Trophy },
+    { id: 'languages', label: 'Languages', icon: Globe },
+    { id: 'references', label: 'References', icon: Users },
+    { id: 'custom', label: 'Custom', icon: LayoutList },
+    { id: 'review', label: 'Review', icon: FileText },
   ];
 
   const handleNextStep = () => {
@@ -231,6 +249,7 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
         {steps.map((step, index) => {
           const isActive = currentStep === step.id;
           const isDone = isStepCompleted(step.id);
+          const StepIcon = step.icon;
           return (
             <button
               key={step.id}
@@ -248,7 +267,7 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
                     ? 'bg-blue-950/60 text-blue-300 border border-blue-500/20' 
                     : 'bg-slate-50/50 dark:bg-white/5 text-slate-500 dark:text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10'
               }`}>
-                {isDone ? '✓' : step.icon}
+                {isDone ? <CheckCircle className="w-3.5 h-3.5" /> : <StepIcon className="w-3.5 h-3.5" />}
               </span>
               <div className="flex flex-col min-w-0">
                 <span className="text-[9px] font-bold uppercase tracking-wider opacity-60 leading-none">Step {index + 1}</span>
@@ -260,12 +279,12 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
       </div>
 
       {/* Mobile Stepper Progress */}
-      <div className="md:hidden bg-slate-900/40 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-sm space-y-3.5 w-full backdrop-blur-sm">
-        <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+      <div className="md:hidden bg-white/90 border border-slate-200 dark:border-white/10 dark:bg-slate-900/40 rounded-2xl p-5 shadow-sm space-y-3.5 w-full backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3 text-[10px] font-extrabold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
           <span>Step {steps.findIndex(s => s.id === currentStep) + 1} of {steps.length}: {steps.find(s => s.id === currentStep)?.label}</span>
-          <span className="text-blue-400">{Math.round(((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100)}%</span>
+          <span className="text-blue-600 dark:text-blue-400">{Math.round(((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100)}%</span>
         </div>
-        <div className="w-full h-1.5 bg-slate-50/50 dark:bg-white/5 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500" 
             style={{ width: `${((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100}%` }}
@@ -276,11 +295,12 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
           {steps.map((step) => {
             const isActive = currentStep === step.id;
             const isDone = isStepCompleted(step.id);
+            const StepIcon = step.icon;
             return (
               <button
                 key={step.id}
                 onClick={() => setCurrentStep(step.id as any)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap text-xs font-semibold border transition-all ${
+                className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap text-xs font-semibold border transition-all ${
                   isActive
                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/10'
                     : isDone
@@ -288,7 +308,7 @@ export default function ResumeScratchBuilder({ onComplete, prefilledRole, prefil
                       : 'bg-slate-50/50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'
                 }`}
               >
-                <span>{isDone ? '✓' : step.icon}</span>
+                <span className="shrink-0">{isDone ? <CheckCircle className="w-3.5 h-3.5" /> : <StepIcon className="w-3.5 h-3.5" />}</span>
                 <span>{step.label}</span>
               </button>
             );

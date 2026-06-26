@@ -72,6 +72,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [zoom, setZoom] = useState<number>(100);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
+  const exportPreviewRef = useRef<HTMLDivElement>(null);
 
   // Scrollbar and navigation state for horizontal stepper
   const stepperRef = useRef<HTMLDivElement>(null);
@@ -128,6 +129,12 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }, 100);
     return () => clearTimeout(timer);
   }, [activeEditTab]);
+
+  useEffect(() => {
+    if (activeEditTab === 'preview' && window.innerWidth < 640 && zoom > 45) {
+      setZoom(42);
+    }
+  }, [activeEditTab, zoom]);
 
   const [countriesList, setCountriesList] = useState<any[]>([]);
   const [atsRules, setAtsRules] = useState<any>(null);
@@ -289,9 +296,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   };
 
   const handleExportPDF = async () => {
-    const element = document.getElementById('resume-pdf-content');
+    const element = exportPreviewRef.current;
     if (!element) {
-      toast.error('Failed to locate resume preview. Render preview tab first.');
+      toast.error('Failed to prepare resume preview. Please try again.');
       return;
     }
     toast.info('Exporting resume to PDF...');
@@ -305,9 +312,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   };
 
   const handleExportDOCX = async () => {
-    const element = document.getElementById('resume-pdf-content');
+    const element = exportPreviewRef.current;
     if (!element) {
-      toast.error('Failed to locate resume preview. Render preview tab first.');
+      toast.error('Failed to prepare resume preview. Please try again.');
       return;
     }
     toast.info('Exporting resume to Word document...');
@@ -763,25 +770,28 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     || activeEditTab === EDITOR_FLOW_STEPS[EDITOR_FLOW_STEPS.length - 1].key;
 
   return (
-    <div className="w-full h-full font-sans text-slate-800 dark:text-slate-200 pb-16 lg:pb-0">
+    <div className="w-full h-full font-sans text-slate-800 dark:text-slate-200 pb-[72px] lg:pb-0">
       {/* Editor workspace */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,460px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,560px)] gap-4 h-full min-h-0">
-        <div className="w-full flex flex-col gap-3 h-full min-h-0">
+        <div className="w-full flex flex-col gap-2 sm:gap-3 h-full min-h-0">
         {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
-        <div className="glass-panel border border-slate-200 dark:border-white/10 rounded-xl shadow-sm shrink-0 overflow-hidden">
+        <div className={cn(
+          "glass-panel border border-slate-200 dark:border-white/10 rounded-xl shadow-sm shrink-0 overflow-hidden",
+          activeEditTab === 'preview' && "lg:block"
+        )}>
           {/* Row 1: Title + Action Buttons */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-white/10">
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-slate-200 dark:border-white/10">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm shadow-blue-500/20 shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm shadow-blue-500/20 shrink-0">
                 <Sparkles className="w-4.5 h-4.5 text-white" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5 group/title">
                   <input 
                     type="text" 
                     value={localResume.title}
                     onChange={(e) => updateResumeData({ ...localResume, title: e.target.value })}
-                    className="bg-transparent border-none p-0 m-0 font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight focus:ring-0 focus:outline-none focus:border-b focus:border-slate-350 dark:focus:border-slate-700 w-auto max-w-[200px]"
+                    className="bg-transparent border-none p-0 m-0 font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight focus:ring-0 focus:outline-none focus:border-b focus:border-slate-350 dark:focus:border-slate-700 w-full max-w-[180px] sm:max-w-[260px] truncate"
                     placeholder="Resume Title"
                   />
                   <Edit3 className="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover/title:opacity-100 transition-opacity shrink-0" />
@@ -814,18 +824,18 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
           {/* Row 2: Layout + Target Job */}
-          <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-slate-100/50 dark:bg-slate-950/20">
+          <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100/50 dark:bg-slate-950/20">
             <div className="flex items-center gap-1.5 bg-slate-50/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg py-1 px-2.5 shadow-xs">
               <Settings className="w-3 h-3 text-slate-500 dark:text-slate-500 dark:text-slate-400" />
-              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Exclusive ATS (Emerald)</span>
+              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">ATS Emerald</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider shrink-0">Target:</span>
               <Select value={selectedJob} onValueChange={(v) => {
                 setSelectedJob(v);
                 updateResumeData({ ...localResume, jobDescriptionId: v });
               }}>
-                <SelectTrigger id="quick-job-select" className="h-7 text-[11px] font-semibold rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-800 dark:text-slate-200 min-w-[130px] max-w-[200px] shadow-xs">
+                <SelectTrigger id="quick-job-select" className="h-8 text-[11px] font-semibold rounded-lg border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-800 dark:text-slate-200 min-w-0 w-full max-w-[210px] shadow-xs">
                   <SelectValue placeholder="Select target job..." />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200">
@@ -933,7 +943,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           ) : (
             /* Premium Phase Tracker for review and mobile preview */
-            <div className="flex items-center justify-center gap-3 py-4 bg-slate-100/80 dark:bg-slate-950/40 border-b border-slate-200/50 dark:border-white/5 select-none text-[11px] font-bold shrink-0">
+            <div className={cn(
+              "items-center justify-center gap-3 py-3 bg-slate-100/80 dark:bg-slate-950/40 border-b border-slate-200/50 dark:border-white/5 select-none text-[11px] font-bold shrink-0 overflow-x-auto px-3",
+              activeEditTab === 'preview' ? "hidden lg:flex" : "flex"
+            )}>
               <button
                 type="button"
                 onClick={() => setActiveEditTab('header')}
@@ -992,7 +1005,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           )}
           
-          <div className="flex-1 px-4 sm:px-5 py-4 overflow-y-auto h-full">
+          <div className={cn(
+            "flex-1 overflow-y-auto h-full min-h-0",
+            activeEditTab === 'preview' ? "px-0 py-0 sm:px-5 sm:py-4" : "px-4 sm:px-5 py-4"
+          )}>
             <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full h-full">
 
 
@@ -1007,7 +1023,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <p className="text-xs text-slate-500 dark:text-slate-500 dark:text-slate-400 mt-0.5">Your name, title, and contact details that appear at the top of your resume.</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid resume-editor-grid-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="edit-name" className="text-xs font-semibold text-slate-700 dark:text-slate-300">Full Name <span className="text-red-400">*</span></Label>
                       <Input
@@ -1635,7 +1651,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid resume-editor-grid-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Institution</Label>
                             <Input
@@ -1755,7 +1771,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Certification Name</Label>
                             <Input
@@ -1868,7 +1884,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Language *</Label>
                             <Input
@@ -1978,7 +1994,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         </div>
 
                         {!ref.availableOnRequest && (
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">Name *</Label>
                               <Input
@@ -2196,7 +2212,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <div className="space-y-1">
                                     <Label className="text-[10px]">Item Title *</Label>
                                     <Input
@@ -2354,29 +2370,29 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 </TabsContent>
 
                 {/* LIVE PREVIEW TAB */}
-                <TabsContent value="preview" className="space-y-5 h-full flex flex-col">
-                  <div className="flex items-start gap-3 pb-4 border-b border-slate-200 dark:border-white/10 shrink-0">
-                    <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <Eye className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                <TabsContent value="preview" className="h-full min-h-0 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3 rounded-t-xl border-b border-slate-200 bg-white/85 px-3 py-2.5 dark:border-white/10 dark:bg-slate-950/40 sm:rounded-xl sm:border">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0">
+                        <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight truncate">Live Preview</h3>
+                        <p className="hidden sm:block text-xs text-slate-550 dark:text-slate-455 mt-0.5 font-semibold">Inspect your resume before export.</p>
+                      </div>
                     </div>
-                    <div className="flex-1 flex justify-between items-center flex-wrap gap-3">
-                      <div>
-                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-[15px] leading-tight">Resume Live Preview</h3>
-                        <p className="text-xs text-slate-550 dark:text-slate-455 mt-0.5 font-semibold">Preview how your ATS-optimized resume looks. Switch steps or zoom to inspect.</p>
-                      </div>
-                      <div className="flex gap-1.5 items-center">
-                        <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.max(50, zoom - 10))}>
-                          <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
-                        </Button>
-                        <span className="text-[11px] text-slate-700 dark:text-slate-300 font-extrabold px-1 min-w-[32px] text-center">{zoom}%</span>
-                        <Button variant="outline" size="icon" className="h-7 w-7 border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-white" onClick={() => setZoom(Math.min(150, zoom + 10))}>
-                          <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
-                        </Button>
-                      </div>
+                    <div className="flex gap-1.5 items-center rounded-xl bg-slate-50 p-1 dark:bg-white/5">
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5" onClick={() => setZoom(Math.max(35, zoom - 10))}>
+                        <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
+                      </Button>
+                      <span className="text-[11px] text-slate-700 dark:text-slate-300 font-extrabold px-1 min-w-[34px] text-center">{zoom}%</span>
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5" onClick={() => setZoom(Math.min(150, zoom + 10))}>
+                        <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex-1 overflow-hidden flex min-h-[500px] border border-slate-200 dark:border-white/10 rounded-xl bg-slate-100 dark:bg-[#131b2e]">
-                    <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} />
+                  <div className="flex-1 min-h-0 overflow-hidden flex border-y border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-[#131b2e] sm:rounded-xl sm:border">
+                    <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} contentId="resume-preview-mobile" />
                   </div>
                 </TabsContent>
 
@@ -2497,7 +2513,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           </div>
           
           {/* Wizard Navigation Footer */}
-          <div className="shrink-0 border-t border-slate-200/50 dark:border-white/5">
+          <div className="hidden sm:block shrink-0 border-t border-slate-200/50 dark:border-white/5">
             {/* Mini progress bar */}
             <div className="h-0.5 bg-slate-50/50 dark:bg-white/5">
               <div 
@@ -2611,9 +2627,22 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
-            <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} />
+            <ResumePreview resume={localResume} templateId={selectedTemplate} zoom={zoom} contentId="resume-preview-desktop" />
           </div>
         </aside>
+      </div>
+
+      <div
+        aria-hidden="true"
+        className="fixed left-[-10000px] top-0 h-[1200px] w-[900px] overflow-visible bg-white pointer-events-none"
+      >
+        <ResumePreview
+          resume={localResume}
+          templateId={selectedTemplate}
+          zoom={100}
+          contentRef={exportPreviewRef}
+          contentId="resume-pdf-content"
+        />
       </div>
 
       {showDownloadModal && (
@@ -2738,7 +2767,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         </div>
       )}
       {/* Mobile Bottom Navigation Bar (Stitch Light theme compliant mockup mapped actions) */}
-      <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#0f172a]/95 backdrop-blur-xl border-t border-slate-200 dark:border-white/10 shadow-lg flex justify-around items-center py-2 px-4 pb-safe lg:hidden">
+      <nav className="fixed bottom-0 left-0 w-full z-50 bg-white/95 text-slate-500 backdrop-blur-xl border-t border-slate-200 shadow-lg flex justify-around items-center px-3 pt-2 pb-3 dark:bg-[#0f172a]/95 dark:text-slate-400 dark:border-white/10 lg:hidden">
         {/* Layout/Templates button */}
         <button 
           type="button"
@@ -2746,10 +2775,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             setActiveEditTab('layout');
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === 'layout' 
-              ? "text-blue-400 font-bold" 
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
+              ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30" 
+              : "hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
           <Settings className="w-5 h-5" />
@@ -2765,10 +2794,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             }
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab !== 'layout' && activeEditTab !== 'preview' && activeEditTab !== 'review'
-              ? "text-blue-400 font-bold" 
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
+              ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30" 
+              : "hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
           <Edit3 className="w-5 h-5" />
@@ -2780,10 +2809,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           type="button"
           onClick={() => setActiveEditTab('preview')}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === 'preview'
-              ? "text-blue-400 font-bold" 
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
+              ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30" 
+              : "hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
           <Eye className="w-5 h-5" />
@@ -2795,10 +2824,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           type="button"
           onClick={() => setActiveEditTab('review')}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-lg gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === 'review'
-              ? "text-blue-400 font-bold" 
-              : "text-slate-550 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200"
+              ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30" 
+              : "hover:text-slate-800 dark:hover:text-slate-200"
           )}
         >
           <Download className="w-5 h-5" />
