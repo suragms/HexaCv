@@ -17,6 +17,7 @@ export function useAuth(options?: UseAuthOptions) {
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
+    staleTime: 0,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -31,16 +32,15 @@ export function useAuth(options?: UseAuthOptions) {
     try {
       await logoutMutation.mutateAsync();
     } catch (error: unknown) {
-      if (
-        error instanceof TRPCClientError &&
-        error.data?.code === "UNAUTHORIZED"
-      ) {
-        return;
-      }
+      console.warn("[Auth] Logout request warning:", error);
     } finally {
+      localStorage.removeItem("manus-runtime-user-info");
       logoutLocalUser();
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
+      if (typeof window !== "undefined") {
+        window.location.href = "/api/auth/logout";
+      }
     }
   }, [logoutMutation, utils]);
 

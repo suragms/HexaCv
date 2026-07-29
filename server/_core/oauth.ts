@@ -42,6 +42,7 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      res.clearCookie("hexacv_logout", { ...cookieOptions });
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       res.redirect(302, "/");
@@ -84,6 +85,7 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      res.clearCookie("hexacv_logout", { ...cookieOptions });
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
       
       const defaultRedirect = isAdmin ? "/admin" : "/";
@@ -93,5 +95,16 @@ export function registerOAuthRoutes(app: Express) {
       console.error("[Mock Auth] Login failed", error);
       res.status(500).json({ error: "Mock login failed" });
     }
+  });
+
+  // Explicit HTTP logout endpoint
+  app.get("/api/auth/logout", (req: Request, res: Response) => {
+    const cookieOptions = getSessionCookieOptions(req);
+    res.clearCookie(COOKIE_NAME, cookieOptions);
+    res.clearCookie(COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "lax", secure: false });
+    res.clearCookie(COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "none", secure: true });
+    res.clearCookie(COOKIE_NAME, { path: "/", httpOnly: true });
+    res.clearCookie(COOKIE_NAME);
+    res.redirect(302, "/");
   });
 }

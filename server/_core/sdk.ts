@@ -295,30 +295,6 @@ class SDKServer {
       }
     }
 
-    // In local development or fallback sandbox, default to seeded admin user
-    if (process.env.NODE_ENV === "development" || process.env.SANDBOX_LOCAL === "true" || !process.env.DATABASE_URL) {
-      const signedInAt = new Date();
-      let user = await db.getUserByOpenId("admin-key-owner");
-
-      if (!user) {
-        try {
-          await db.upsertUser({
-            openId: "admin-key-owner",
-            name: "Admin User",
-            email: "admin@hexacv.com",
-            loginMethod: "oauth",
-            lastSignedIn: signedInAt,
-            role: "admin",
-          });
-          user = await db.getUserByOpenId("admin-key-owner");
-        } catch (error) {
-          console.error("[Auth] Failed to seed default mock admin user:", error);
-        }
-      }
-
-      return user || null;
-    }
-
     return null;
   }
 }
