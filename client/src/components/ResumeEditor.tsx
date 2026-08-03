@@ -1,17 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Card, CardContent } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
+import { Textarea } from "@/shared/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/shared/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import {
   Download,
   Eye,
@@ -45,17 +45,36 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Resume, TemplateId, ParsedResume, ResumeSection } from "@shared/types";
 import { PRESET_JOBS, matchPresetJobByTitle } from "@/lib/jobDescriptions";
 import { ensureStandardResumeSections } from "@/lib/resumeSections";
+import {
+  markBulletEdits,
+  mergeBulletsAi,
+  mergeSummaryAi,
+} from "@/lib/userEditedMerge";
 import ResumePreview from "./ResumePreview";
+import ContextualEditor from "./ContextualEditor";
 import CountryLocationFields from "./CountryLocationFields";
 import { exportResumeToPDF, exportResumeToDOCX } from "@/lib/pdfExport";
+import { buildExportFilename } from "@/lib/exportFilename";
+import JdKeywordMatch from "@/components/JdKeywordMatch";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
+
+const MORE_SECTION_KEYS = [
+  "certifications",
+  "achievements",
+  "languages",
+  "references",
+  "custom",
+  "layout",
+] as const;
 
 const WIZARD_STEPS = [
   { id: 1, label: "Header", key: "header", icon: User },
@@ -64,18 +83,20 @@ const WIZARD_STEPS = [
   { id: 4, label: "Experience", key: "experience", icon: Briefcase },
   { id: 5, label: "Projects", key: "projects", icon: Folder },
   { id: 6, label: "Education", key: "education", icon: GraduationCap },
-  { id: 7, label: "Credentials", key: "certifications", icon: Award },
-  { id: 8, label: "Achievements", key: "achievements", icon: Trophy },
-  { id: 9, label: "Languages", key: "languages", icon: Globe },
-  { id: 10, label: "References", key: "references", icon: Users },
-  { id: 11, label: "Custom", key: "custom", icon: LayoutList },
-  { id: 12, label: "Layout", key: "layout", icon: Settings },
-  { id: 13, label: "Review & Export", key: "review", icon: CheckCircle2 },
-  { id: 14, label: "Live Preview", key: "preview", icon: Eye },
+  { id: 7, label: "More", key: "more", icon: LayoutList },
+  { id: 8, label: "Review & Export", key: "review", icon: CheckCircle2 },
+  { id: 9, label: "Live Preview", key: "preview", icon: Eye },
 ];
 
-const FORM_STEPS = WIZARD_STEPS.slice(0, 12);
+const FORM_STEPS = WIZARD_STEPS.filter(
+  step => step.key !== "review" && step.key !== "preview"
+);
 const EDITOR_FLOW_STEPS = WIZARD_STEPS.filter(step => step.key !== "preview");
+
+function resolveWizardKey(tab: string): string {
+  if ((MORE_SECTION_KEYS as readonly string[]).includes(tab)) return "more";
+  return tab;
+}
 
 interface ResumeEditorProps {
   resume: Resume;
@@ -93,8 +114,28 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
   const [activeEditTab, setActiveEditTab] = useState<string>("header");
   const [isRewritingSummary, setIsRewritingSummary] = useState<boolean>(false);
   const [rewritingExpId, setRewritingExpId] = useState<string | null>(null);
+  const [feedbackTarget, setFeedbackTarget] = useState<
+    "summary" | "bullets" | null
+  >(null);
   const improveSummaryMutation = trpc.ai.improveSummary.useMutation();
   const improveBulletsMutation = trpc.ai.improveBullets.useMutation();
+  const submitEvaluationMutation = trpc.ai.submitEvaluation.useMutation();
+
+  const sendAiFeedback = async (rating: "up" | "down") => {
+    try {
+      await submitEvaluationMutation.mutateAsync({
+        resumeId: localResume.id,
+        stage: "rewrite",
+        rating,
+      });
+      toast.success(
+        rating === "up" ? "Thanks — feedback recorded." : "Thanks — we'll use this to improve."
+      );
+      setFeedbackTarget(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Could not save feedback");
+    }
+  };
 
   // Auto-select target job from parsed job title / target role when not already set
   useEffect(() => {
@@ -114,6 +155,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     "saved"
   );
   const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
+  const [contextualSection, setContextualSection] = useState<string | null>(null);
   const exportPreviewRef = useRef<HTMLDivElement>(null);
 
   // Scrollbar and navigation state for horizontal stepper
@@ -355,16 +397,38 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   };
 
+  // Contextual editor — clicked section in the live preview opens the slide-out.
+  const handleSectionSelect = (type: string) => {
+    setContextualSection(type);
+    setActiveEditTab(type as any);
+  };
+
+  const resolveExportName = (ext: "pdf" | "doc") => {
+    const header = localResume.sections.find((s) => s.type === "header")?.content
+      ?.header as { name?: string } | undefined;
+    const targetRole =
+      (localResume as any).targetRole ||
+      (localResume as any).jobTitle ||
+      undefined;
+    return buildExportFilename({
+      name: header?.name,
+      targetRole,
+      titleFallback: localResume.title,
+      ext,
+    });
+  };
+
   const handleExportPDF = async () => {
     const element = exportPreviewRef.current;
     if (!element) {
       toast.error("Failed to prepare resume preview. Please try again.");
       return;
     }
-    toast.info("Exporting resume to PDF...");
+    const filename = resolveExportName("pdf");
+    toast.info(`Downloading ${filename}…`);
     try {
-      await exportResumeToPDF(element, `${localResume.title || "resume"}.pdf`);
-      toast.success("PDF downloaded successfully!");
+      await exportResumeToPDF(element, filename);
+      toast.success(`Downloaded ${filename}`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to export PDF.");
@@ -377,13 +441,14 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       toast.error("Failed to prepare resume preview. Please try again.");
       return;
     }
-    toast.info("Exporting resume to Word document...");
+    const filename = resolveExportName("doc");
+    toast.info(`Downloading ${filename}…`);
     try {
-      await exportResumeToDOCX(element, `${localResume.title || "resume"}.doc`);
-      toast.success("Word document downloaded successfully!");
+      await exportResumeToDOCX(element, filename);
+      toast.success(`Downloaded ${filename}`);
     } catch (e) {
       console.error(e);
-      toast.error("Failed to export DOCX.");
+      toast.error("Failed to export Word document.");
     }
   };
 
@@ -749,6 +814,11 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         const cust = getSectionContent("custom").customSections || [];
         return cust.length > 0 && cust.some((c: any) => c.title?.trim());
       }
+      case "more":
+        return MORE_SECTION_KEYS.some(k => {
+          if (k === "layout") return true;
+          return isStepCompleted(k);
+        });
       case "layout":
       case "preview":
       case "review":
@@ -821,8 +891,9 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     updateResumeData({ ...localResume, sections: updated });
   };
 
-  const handleRewriteSummary = async () => {
-    const currentSummary = getSectionContent("summary").summary || "";
+  const handleRewriteSummary = async (force = false) => {
+    const summaryContent = getSectionContent("summary");
+    const currentSummary = summaryContent.summary || "";
     const activeJob = PRESET_JOBS.find(j => j.id === selectedJob);
     const jobDescription = activeJob ? activeJob.description : "";
 
@@ -840,6 +911,17 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       return;
     }
 
+    if (summaryContent.summaryUserEdited && !force) {
+      const overwrite = window.confirm(
+        "Your summary was edited manually and is protected. Overwrite with AI?"
+      );
+      if (!overwrite) {
+        toast.message("Protected — summary kept (edited by you).");
+        return;
+      }
+      force = true;
+    }
+
     setIsRewritingSummary(true);
     try {
       const headerSec = localResume.sections.find(s => s.type === "header");
@@ -855,7 +937,21 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
       });
 
       if (rewritten) {
-        updateSection("summary", { summary: rewritten });
+        const merged = mergeSummaryAi(
+          currentSummary,
+          rewritten,
+          summaryContent.summaryUserEdited,
+          force
+        );
+        if (merged.blocked) {
+          toast.message("Protected — summary kept (edited by you).");
+          return;
+        }
+        updateSection("summary", {
+          summary: merged.text,
+          summaryUserEdited: merged.summaryUserEdited,
+        });
+        setFeedbackTarget("summary");
         toast.success("Summary rewritten and optimized with AI!");
       }
     } catch (err: any) {
@@ -866,7 +962,10 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   };
 
-  const handleRewriteExperienceBullets = async (expIndex: number) => {
+  const handleRewriteExperienceBullets = async (
+    expIndex: number,
+    force = false
+  ) => {
     const activeJob = PRESET_JOBS.find(j => j.id === selectedJob);
     const jobDescription = activeJob ? activeJob.description : "";
 
@@ -882,6 +981,18 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     if (!exp || !exp.description?.length) {
       toast.error("Add at least one bullet point before rewriting.");
       return;
+    }
+
+    const hasProtected = (exp.descriptionEdited || []).some(Boolean);
+    if (hasProtected && !force) {
+      const overwrite = window.confirm(
+        "Some bullets were edited manually and are protected. Overwrite all with AI?"
+      );
+      if (!overwrite) {
+        toast.message("Protected — your edited bullets were kept.");
+        return;
+      }
+      force = true;
     }
 
     const headerSec = localResume.sections.find(s => s.type === "header");
@@ -900,12 +1011,36 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
         targetCountryCode: headerVal.targetCountryCode || "",
       });
 
-      const list = [...experiences];
-      list[expIndex] = { ...exp, description: improved };
-      updateSection("experience", { experiences: list });
-      toast.success(
-        "Experience bullets rewritten using your job title and target role."
+      const merged = mergeBulletsAi(
+        exp.description,
+        improved,
+        exp.descriptionEdited,
+        force
       );
+      if (merged.blockedCount > 0 && merged.appliedCount === 0) {
+        toast.message("Protected — your edited bullets were kept.");
+        return;
+      }
+      if (merged.blockedCount > 0) {
+        toast.message(
+          `Protected ${merged.blockedCount} edited bullet(s); updated ${merged.appliedCount}.`
+        );
+      } else {
+        toast.success(
+          "Experience bullets rewritten using your job title and target role."
+        );
+      }
+
+      const list = [...experiences];
+      list[expIndex] = {
+        ...exp,
+        description: merged.bullets,
+        descriptionEdited: merged.flags,
+      };
+      updateSection("experience", { experiences: list });
+      if (merged.appliedCount > 0 || force) {
+        setFeedbackTarget("bullets");
+      }
     } catch (err: any) {
       console.error("Error rewriting bullets:", err);
       toast.error(err?.message || "Failed to rewrite experience bullets.");
@@ -914,22 +1049,66 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
     }
   };
 
+  const resolvedTab = resolveWizardKey(activeEditTab);
   const activeFlowIndex =
     activeEditTab === "preview"
       ? EDITOR_FLOW_STEPS.length - 1
       : Math.max(
           0,
-          EDITOR_FLOW_STEPS.findIndex(s => s.key === activeEditTab)
+          EDITOR_FLOW_STEPS.findIndex(s => s.key === resolvedTab)
         );
+  const formStepIndex = Math.max(
+    0,
+    FORM_STEPS.findIndex(s => s.key === resolvedTab)
+  );
   const isFinalFlowStep =
     activeEditTab === "preview" ||
-    activeEditTab === EDITOR_FLOW_STEPS[EDITOR_FLOW_STEPS.length - 1].key;
+    resolvedTab === EDITOR_FLOW_STEPS[EDITOR_FLOW_STEPS.length - 1].key;
 
   return (
     <div className="w-full h-full font-sans text-slate-800 dark:text-slate-200 pb-[72px] lg:pb-0">
       {/* Editor workspace */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
         <div className="w-full flex flex-col gap-2 sm:gap-3 h-full min-h-0">
+          <JdKeywordMatch
+            jobDescription={
+              (() => {
+                try {
+                  const meta = sessionStorage.getItem("hexacv_pipeline_meta");
+                  if (!meta) return null;
+                  const parsed = JSON.parse(meta) as { targetKeywords?: string[] };
+                  // Prefer live JD from target draft
+                  const draft = localStorage.getItem("hexacv_target_panel_draft");
+                  if (draft) {
+                    const d = JSON.parse(draft) as { jobDescription?: string };
+                    if (d.jobDescription) return d.jobDescription;
+                  }
+                  return (parsed.targetKeywords || []).join(" ");
+                } catch {
+                  return null;
+                }
+              })()
+            }
+            resumeText={getResumeTextContent()}
+            regionTips={
+              (() => {
+                try {
+                  const draft = localStorage.getItem("hexacv_target_panel_draft");
+                  if (!draft) return null;
+                  const d = JSON.parse(draft) as { market?: string };
+                  if (d.market === "Gulf") {
+                    return "Gulf tip: include visa/nationality only if you supplied it.";
+                  }
+                  if (d.market === "India") {
+                    return "India tip: keep structure clear and ATS keywords grounded in your experience.";
+                  }
+                  return null;
+                } catch {
+                  return null;
+                }
+              })()
+            }
+          />
           {/* Toggle Mode header on mobile, regular title + quick settings on desktop */}
           <div
             className={cn(
@@ -970,7 +1149,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                         ? "Review & Export"
                         : activeEditTab === "preview"
                           ? "Live Preview"
-                          : `Step ${FORM_STEPS.findIndex(s => s.key === activeEditTab) + 1}/12`}
+                          : `Step ${formStepIndex + 1}/${FORM_STEPS.length}`}
                     </span>
                   </div>
                 </div>
@@ -979,7 +1158,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 border-slate-200 dark:border-white/10 rounded-lg bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
+                  className="h-11 w-11 border-slate-200 dark:border-white/10 rounded-lg bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                   onClick={handleUndo}
                   disabled={historyIndex <= 0}
                   title="Undo"
@@ -989,7 +1168,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 border-slate-200 dark:border-white/10 rounded-lg bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
+                  className="h-11 w-11 border-slate-200 dark:border-white/10 rounded-lg bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                   onClick={handleRedo}
                   disabled={historyIndex >= history.length - 1}
                   title="Redo"
@@ -1049,7 +1228,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   type="button"
                   onClick={scrollLeftDirection}
                   className={cn(
-                    "absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                    "absolute left-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
                     canScrollLeft
                       ? "opacity-100 pointer-events-auto"
                       : "opacity-0 pointer-events-none"
@@ -1073,7 +1252,12 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   {FORM_STEPS.map((step, idx) => {
                     const Icon = step.icon;
                     const isDone = isStepCompleted(step.key);
-                    const isActive = activeEditTab === step.key;
+                    const isActive =
+                      resolvedTab === step.key ||
+                      (step.key === "more" &&
+                        (MORE_SECTION_KEYS as readonly string[]).includes(
+                          activeEditTab
+                        ));
 
                     return (
                       <div
@@ -1136,7 +1320,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   type="button"
                   onClick={scrollRightDirection}
                   className={cn(
-                    "absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
+                    "absolute right-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/90 dark:bg-slate-900/90 shadow-md border border-slate-200 dark:border-white/15 flex items-center justify-center text-slate-600 dark:text-slate-350 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-sm",
                     canScrollRight
                       ? "opacity-100 pointer-events-auto"
                       : "opacity-0 pointer-events-none"
@@ -1632,7 +1816,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleRewriteSummary}
+                        onClick={() => handleRewriteSummary()}
                         disabled={isRewritingSummary}
                         className="bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-200 gap-1.5 h-8 font-bold text-xs"
                       >
@@ -1654,11 +1838,43 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       placeholder="Write a brief professional summary highlighting your key skills, experience, and achievements..."
                       value={getSectionContent("summary").summary || ""}
                       onChange={e =>
-                        updateSection("summary", { summary: e.target.value })
+                        updateSection("summary", {
+                          summary: e.target.value,
+                          summaryUserEdited: true,
+                        })
                       }
                       rows={8}
                       className="border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-slate-800 dark:text-slate-200 focus-visible:ring-blue-500 rounded-lg text-sm leading-relaxed"
                     />
+                    {feedbackTarget === "summary" && (
+                      <div className="flex items-center gap-2 pt-2">
+                        <span className="text-xs text-slate-500">
+                          Was this AI rewrite helpful?
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1"
+                          disabled={submitEvaluationMutation.isPending}
+                          onClick={() => sendAiFeedback("up")}
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                          Yes
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1"
+                          disabled={submitEvaluationMutation.isPending}
+                          onClick={() => sendAiFeedback("down")}
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                          No
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -1718,7 +1934,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-red-500 h-8"
+                              className="text-red-500 min-h-11"
                               onClick={() => {
                                 const list = (
                                   getSectionContent("skills").skills || []
@@ -1810,7 +2026,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("experience", idx, "up")
                                 }
@@ -1822,7 +2038,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("experience", idx, "down")
                                 }
@@ -1841,7 +2057,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 h-8"
+                                className="text-red-500 min-h-11"
                                 onClick={() => {
                                   const list = (
                                     getSectionContent("experience")
@@ -1996,15 +2212,55 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                                   ...getSectionContent("experience")
                                     .experiences,
                                 ];
-                                list[idx].description = e.target.value
+                                const prev = list[idx];
+                                const nextDesc = e.target.value
                                   .split("\n")
                                   .filter(Boolean);
+                                list[idx] = {
+                                  ...prev,
+                                  description: nextDesc,
+                                  descriptionEdited: markBulletEdits(
+                                    prev.description || [],
+                                    nextDesc,
+                                    prev.descriptionEdited
+                                  ),
+                                };
                                 updateSection("experience", {
                                   experiences: list,
                                 });
                               }}
                               rows={3}
                             />
+                            {feedbackTarget === "bullets" &&
+                              rewritingExpId === null && (
+                              <div className="flex items-center gap-2 pt-2">
+                                <span className="text-xs text-slate-500">
+                                  Was this AI rewrite helpful?
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1"
+                                  disabled={submitEvaluationMutation.isPending}
+                                  onClick={() => sendAiFeedback("up")}
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5" />
+                                  Yes
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1"
+                                  disabled={submitEvaluationMutation.isPending}
+                                  onClick={() => sendAiFeedback("down")}
+                                >
+                                  <ThumbsDown className="w-3.5 h-3.5" />
+                                  No
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
@@ -2072,7 +2328,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() => moveItem("projects", idx, "up")}
                                 disabled={idx === 0}
                                 title="Move Up"
@@ -2082,7 +2338,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("projects", idx, "down")
                                 }
@@ -2099,7 +2355,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 h-8"
+                                className="text-red-500 min-h-11"
                                 onClick={() => {
                                   const list = (
                                     getSectionContent("projects").projects || []
@@ -2291,7 +2547,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() => moveItem("education", idx, "up")}
                                 disabled={idx === 0}
                                 title="Move Up"
@@ -2301,7 +2557,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("education", idx, "down")
                                 }
@@ -2320,7 +2576,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 h-8"
+                                className="text-red-500 min-h-11"
                                 onClick={() => {
                                   const list = (
                                     getSectionContent("education").educations ||
@@ -2424,6 +2680,71 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                   </div>
                 </TabsContent>
 
+                {/* MORE — optional sections hub */}
+                <TabsContent value="more" className="space-y-5">
+                  <div className="flex items-start gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
+                    <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <LayoutList className="w-4.5 h-4.5 text-slate-600 dark:text-slate-300" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-[15px] leading-tight">
+                        More (optional)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Add credentials, achievements, languages, references,
+                        custom sections, or layout — skip anything you do not
+                        need.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        {
+                          key: "certifications",
+                          label: "Credentials",
+                          icon: Award,
+                        },
+                        {
+                          key: "achievements",
+                          label: "Achievements",
+                          icon: Trophy,
+                        },
+                        { key: "languages", label: "Languages", icon: Globe },
+                        {
+                          key: "references",
+                          label: "References",
+                          icon: Users,
+                        },
+                        { key: "custom", label: "Custom", icon: LayoutList },
+                        { key: "layout", label: "Layout", icon: Settings },
+                      ] as const
+                    ).map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setActiveEditTab(item.key)}
+                          className="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-4 py-3 text-left hover:border-blue-400/50 transition-colors"
+                        >
+                          <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            {item.label}
+                          </span>
+                          <ChevronRight className="ml-auto h-4 w-4 text-slate-400" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    onClick={() => setActiveEditTab("review")}
+                    className="w-full min-h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  >
+                    Continue to Review & Export
+                  </Button>
+                </TabsContent>
+
                 {/* CERTIFICATIONS TAB */}
                 <TabsContent value="certifications" className="space-y-5">
                   <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
@@ -2516,7 +2837,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-red-500 h-8"
+                              className="text-red-500 min-h-11"
                               onClick={() => {
                                 const list = (
                                   getSectionContent("certifications")
@@ -2667,7 +2988,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() => moveItem("languages", idx, "up")}
                                 disabled={idx === 0}
                                 title="Move Up"
@@ -2677,7 +2998,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("languages", idx, "down")
                                 }
@@ -2696,7 +3017,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 h-8"
+                                className="text-red-500 min-h-11"
                                 onClick={() => {
                                   const list = (
                                     getSectionContent("languages").languages ||
@@ -2820,7 +3141,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("references", idx, "up")
                                 }
@@ -2832,7 +3153,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("references", idx, "down")
                                 }
@@ -2851,7 +3172,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 h-8"
+                                className="text-red-500 min-h-11"
                                 onClick={() => {
                                   const list = (
                                     getSectionContent("references")
@@ -3082,7 +3403,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("custom", sectIdx, "up")
                                 }
@@ -3094,7 +3415,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-slate-700"
+                                className="h-11 w-11 text-slate-500 hover:text-slate-700"
                                 onClick={() =>
                                   moveItem("custom", sectIdx, "down")
                                 }
@@ -3519,7 +3840,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"
+                        className="h-11 w-11 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"
                         onClick={() => setZoom(Math.max(35, zoom - 10))}
                       >
                         <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
@@ -3530,7 +3851,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"
+                        className="h-11 w-11 rounded-lg border-slate-200 bg-white dark:border-white/10 dark:bg-white/5"
                         onClick={() => setZoom(Math.min(150, zoom + 10))}
                       >
                         <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
@@ -3543,6 +3864,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                       templateId={selectedTemplate}
                       zoom={zoom}
                       contentId="resume-preview-mobile"
+                      onSectionSelect={handleSectionSelect}
                     />
                   </div>
                 </TabsContent>
@@ -3767,7 +4089,11 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
                           key={step.id}
                           className={cn(
                             "w-1.5 h-1.5 rounded-full transition-all duration-300",
-                            activeEditTab === step.key
+                            activeEditTab === step.key ||
+                            (step.key === "more" &&
+                              (MORE_SECTION_KEYS as readonly string[]).includes(
+                                activeEditTab
+                              ))
                               ? "w-4 bg-blue-500"
                               : isStepCompleted(step.key)
                                 ? "bg-blue-300/60"
@@ -3844,7 +4170,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
+                className="h-11 w-11 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 onClick={() => setZoom(Math.max(50, zoom - 10))}
               >
                 <ZoomOut className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
@@ -3855,7 +4181,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
+                className="h-11 w-11 border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10"
                 onClick={() => setZoom(Math.min(150, zoom + 10))}
               >
                 <ZoomIn className="w-3.5 h-3.5 text-slate-600 dark:text-slate-355" />
@@ -3868,6 +4194,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
               templateId={selectedTemplate}
               zoom={zoom}
               contentId="resume-preview-desktop"
+              onSectionSelect={handleSectionSelect}
             />
           </div>
         </aside>
@@ -4072,7 +4399,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             setActiveEditTab("layout");
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex min-h-[44px] flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === "layout"
               ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30"
               : "hover:text-slate-800 dark:hover:text-slate-200"
@@ -4095,7 +4422,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
             }
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex min-h-[44px] flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab !== "layout" &&
               activeEditTab !== "preview" &&
               activeEditTab !== "review"
@@ -4112,7 +4439,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           type="button"
           onClick={() => setActiveEditTab("preview")}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex min-h-[44px] flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === "preview"
               ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30"
               : "hover:text-slate-800 dark:hover:text-slate-200"
@@ -4127,7 +4454,7 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           type="button"
           onClick={() => setActiveEditTab("review")}
           className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
+            "flex min-h-[44px] flex-col items-center justify-center p-2 rounded-xl gap-1 min-w-[64px] transition-all duration-200 active:scale-95 cursor-pointer border-none bg-transparent",
             activeEditTab === "review"
               ? "text-blue-600 bg-blue-50 font-bold dark:text-blue-400 dark:bg-blue-950/30"
               : "hover:text-slate-800 dark:hover:text-slate-200"
@@ -4137,6 +4464,22 @@ export default function ResumeEditor({ resume, onUpdate }: ResumeEditorProps) {
           <span className="text-[10px] font-semibold mt-0.5">Export</span>
         </button>
       </nav>
+
+      {/* Contextual editor — slides over the preview when a section is clicked */}
+      <ContextualEditor
+        resume={localResume}
+        sectionType={contextualSection}
+        onClose={() => setContextualSection(null)}
+        onUpdateSection={updateSection}
+        onRewriteSummary={() => void handleRewriteSummary()}
+        onRewriteBullets={(idx) => void handleRewriteExperienceBullets(idx)}
+        onJumpToEdit={(tab) => {
+          setContextualSection(null);
+          setActiveEditTab(tab as any);
+        }}
+        isRewritingSummary={isRewritingSummary}
+        rewritingExpId={rewritingExpId}
+      />
     </div>
   );
 }

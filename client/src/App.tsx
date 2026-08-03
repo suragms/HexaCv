@@ -1,15 +1,23 @@
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/shared/ui/sonner";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
+import ErrorBoundary from "./shared/layout/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Landing from "./pages/Landing";
 import ResumeBuilder from "./pages/ResumeBuilder";
+import Targeting from "./pages/Targeting";
+import ParseReview from "./pages/ParseReview";
 
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import Refund from "./pages/Refund";
+import CookiePolicy from "./pages/Cookie";
+import Pricing from "./pages/Pricing";
+import ResumeExampleLanding from "./pages/ResumeExampleLanding";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -18,6 +26,13 @@ function Router() {
       <Route path={"/"} component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/refund" component={Refund} />
+      <Route path="/cookies" component={CookiePolicy} />
+      <Route path="/pricing" component={Pricing} />
+      <Route path="/builder/review-draft" component={ParseReview} />
+      <Route path="/builder/target" component={Targeting} />
       <Route path="/builder/upload" component={ResumeBuilder} />
       <Route path="/builder/scratch" component={ResumeBuilder} />
       <Route path="/builder/ai" component={ResumeBuilder} />
@@ -27,6 +42,7 @@ function Router() {
       <Route path="/dashboard/:sub*" component={Dashboard} />
       <Route path="/admin" component={Dashboard} />
       <Route path="/url" component={Dashboard} />
+      <Route path="/resume-examples/:country/:role" component={ResumeExampleLanding} />
 
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

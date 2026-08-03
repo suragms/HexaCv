@@ -1,6 +1,6 @@
-import { getLoginUrl } from "@/const";
-import { trpc } from "@/lib/trpc";
-import { getCurrentLocalUser, logoutLocalUser } from "@/lib/localStorageDb";
+import { getLoginUrl } from "../../const";
+import { trpc } from "../../lib/trpc";
+import { getCurrentLocalUser, logoutLocalUser } from "../../lib/localStorageDb";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
 
@@ -46,9 +46,15 @@ export function useAuth(options?: UseAuthOptions) {
 
   const isLoggedOut = typeof window !== "undefined" && localStorage.getItem("hexacv_logged_out") === "true";
 
-  const localUser = useMemo(() => isLoggedOut ? null : getCurrentLocalUser(), [meQuery.data, meQuery.isLoading, isLoggedOut]);
+  const localUser = useMemo(
+    () => (isLoggedOut ? null : getCurrentLocalUser()),
+    [meQuery.data, meQuery.isLoading, isLoggedOut]
+  );
 
-  const activeUser = isLoggedOut ? null : (localUser as any) ?? meQuery.data ?? null;
+  // Server session (auth.me) wins over localStorage so mock names cannot override real users.
+  const activeUser = isLoggedOut
+    ? null
+    : (meQuery.data as any) ?? (localUser as any) ?? null;
 
   const state = useMemo(() => {
     if (activeUser) {

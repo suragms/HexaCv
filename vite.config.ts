@@ -1,4 +1,3 @@
-import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
@@ -150,22 +149,25 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+const plugins = [react(), tailwindcss(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+
+const rootDir = import.meta.dirname.replaceAll("\\", "/");
 
 export default defineConfig({
   plugins,
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@": `${rootDir}/client/src`,
+      "@shared": `${rootDir}/shared`,
+      "@server": `${rootDir}/server`,
+      "@assets": `${rootDir}/attached_assets`,
     },
   },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
+  envDir: rootDir,
+  root: `${rootDir}/client`,
+  publicDir: `${rootDir}/client/public`,
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: `${rootDir}/dist/public`,
     emptyOutDir: true,
   },
   server: {
@@ -181,6 +183,7 @@ export default defineConfig({
     ],
     fs: {
       strict: true,
+      allow: [rootDir],
       deny: ["**/.*"],
     },
   },

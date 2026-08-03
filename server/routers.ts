@@ -6,12 +6,49 @@ import { z } from "zod";
 import * as db from "./db";
 import { generateResumeSuggestions, improveBulletPoints, calculateKeywordAlignment, improveSummary, improveProjectBullets, generateCoverLetter, generateLinkedInAbout, atsAudit, generateInterviewQuestions, generateRecruiterOutreach } from "./aiSuggestions";
 import { nanoid } from "nanoid";
-import { invokeLLM } from "./_core/llm";
 import { extractText, parseResumeWithLLM } from "./fileParser";
-import { validateGeneratedResume, isPlaceholderText, isAiGeneratedPhrase } from "./contentValidation";
-import Stripe from "stripe";
-import { getAllApiKeys, saveApiKey, testApiKey as testApiKeyFunc } from "./apiKeyManager";
+import { getAllApiKeys, saveApiKey, testApiKey as testApiKeyFunc, isAiPaused, upsertModelRoute } from "./apiKeyManager";
+import { TRPCError } from "@trpc/server";
+import { buildAdminUsageStats } from "./usageTracker";
+import { runResumePipeline } from "./ai/pipelineOrchestrator";
+import {
+  createRazorpayOrder,
+  getPaymentProvider,
+  verifyAndFulfillCheckout,
+  listPaymentOrders,
+  adminRefundPaymentOrder,
+} from "./payments/razorpay";
+import { isEffectivelyPaid } from "./subscriptionGrace";
+import {
+  getCreditBalance,
+  grantSignupFreeCredit,
+  consumeBuildCredit,
+  releaseBuildCredit,
+  createBuild,
+  updateBuildStage,
+  getBuild,
+} from "./credits";
 
+async function resolveTrackedAiOpts(ctx: {
+  user?: { id: number } | null;
+}): Promise<{
+  userId: number | null;
+  planTier: "guest" | "free" | "paid";
+  guestKey?: string;
+}> {
+  let planTier: "guest" | "free" | "paid" = "guest";
+  let userId: number | null = null;
+  if (ctx.user?.id) {
+    userId = ctx.user.id;
+    const sub = await db.getSubscription(ctx.user.id);
+    planTier = isEffectivelyPaid(sub) ? "paid" : "free";
+  }
+  return {
+    userId,
+    planTier,
+    guestKey: userId == null ? "anonymous-web" : undefined,
+  };
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,11 +66,50 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    setEvaluationOptOut: protectedProcedure
+      .input(z.object({ optOut: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        await db.setUserEvaluationOptOut(ctx.user.id, input.optOut);
+        return { success: true as const, evaluationOptOut: input.optOut };
+      }),
+    updateProfile: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().trim().min(1).max(200),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const updated = await db.updateUserProfile(ctx.user.id, {
+          name: input.name,
+        });
+        return { success: true as const, user: updated };
+      }),
     convertGuest: protectedProcedure
       .input(z.object({ guestSessionId: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        return db.convertGuestSession(input.guestSessionId, ctx.user.id);
+        const result = await db.convertGuestSession(input.guestSessionId, ctx.user.id);
+        // Ensure free credit exists (idempotent) for converted accounts
+        await grantSignupFreeCredit(ctx.user.id);
+        return result;
       }),
+  }),
+
+  // V6: per-build credits
+  credits: router({
+    getBalance: protectedProcedure.query(async ({ ctx }) => {
+      const balance = await getCreditBalance(ctx.user.id);
+      return {
+        balance,
+        ctaLabel:
+          balance > 0
+            ? "Build my resume — free"
+            : "Build my resume — ₹99",
+      };
+    }),
+    ensureSignupCredit: protectedProcedure.mutation(async ({ ctx }) => {
+      const balance = await grantSignupFreeCredit(ctx.user.id);
+      return { balance };
+    }),
   }),
 
   // Resume Router
@@ -61,6 +137,33 @@ export const appRouter = router({
           throw new Error("Resume not found or access denied");
         }
         return resume;
+      }),
+
+    /** V6: poll pipeline stage while generateFullResume is in flight */
+    buildStatus: protectedProcedure
+      .input(z.object({ buildId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        const build = await getBuild(input.buildId, ctx.user.id);
+        if (!build) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Build not found" });
+        }
+        return build;
+      }),
+
+    startBuild: protectedProcedure
+      .input(
+        z.object({
+          role: z.string().optional(),
+          region: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const build = await createBuild({
+          userId: ctx.user.id,
+          role: input.role,
+          region: input.region,
+        });
+        return build;
       }),
       
     create: protectedProcedure
@@ -130,6 +233,16 @@ export const appRouter = router({
         }
         return db.deleteResume(input.id, ctx.user.id);
       }),
+
+    restore: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const existing = await db.getResume(input.id);
+        if (!existing || existing.userId !== ctx.user.id) {
+          throw new Error("Resume not found or access denied");
+        }
+        return db.restoreResume(input.id, ctx.user.id);
+      }),
   }),
 
   // Job Description Router
@@ -170,215 +283,97 @@ export const appRouter = router({
       }),
   }),
 
-  // AI Integration Router
-  ai: router({
-    generateFullResume: publicProcedure
+  // AI Integration Router — gated by AI_PAUSED kill switch
+  ai: (() => {
+    const aiProcedure = publicProcedure.use(async ({ next }) => {
+      if (isAiPaused()) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "temporarily unavailable, try again shortly",
+        });
+      }
+      return next();
+    });
+
+    return router({
+    generateFullResume: aiProcedure
       .input(z.object({
         jobTitle: z.string(),
         experienceDetails: z.string(),
         experienceLevel: z.string().optional(),
         market: z.string().optional(),
         jobDescription: z.string().optional(),
+        buildId: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user?.id) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Sign in to run the AI pipeline. Your draft is saved.",
+          });
+        }
+        const userId = ctx.user.id;
+        const balance = await getCreditBalance(userId);
+        if (balance < 1) {
+          throw new TRPCError({
+            code: "PAYMENT_REQUIRED",
+            message: "No build credits left. Pay ₹99 for one resume build.",
+          });
+        }
+
+        let build =
+          input.buildId
+            ? await getBuild(input.buildId, userId)
+            : null;
+        if (!build) {
+          build = await createBuild({
+            userId,
+            role: input.jobTitle,
+            region: input.market,
+          });
+        }
+
+        const consumed = await consumeBuildCredit(userId, build.id);
+        if (!consumed.ok) {
+          throw new TRPCError({
+            code: "PAYMENT_REQUIRED",
+            message: "No build credits left. Pay ₹99 for one resume build.",
+          });
+        }
+
         try {
-          const response = await invokeLLM({
-            messages: [
-              {
-                role: "system",
-                content:
-            "CRITICAL RULES — you MUST follow all of these:\n" +
-            "1. ONLY use facts from the user's 'Background/Highlights' input. Do NOT invent achievements, metrics, companies, degrees, tools, or responsibilities.\n" +
-            "2. Preserve all company names, dates, technologies, and numbers exactly as stated by the user.\n" +
-            "3. Do NOT use generic AI filler phrases (e.g. 'results-driven', 'synergy', 'leveraged', 'spearheaded').\n" +
-            "4. Tailor wording to the job title and job description, but never fabricate experience.\n" +
-            "5. If the user provides no background details for a section, leave it as an empty array or empty string.\n" +
-            "6. NEVER add skills, experiences, education, or sentences not grounded in the user's input.\n" +
-            "7. Return empty strings or empty arrays rather than inventing placeholder content.\n" +
-            "Generate a fully completed professional resume JSON structure matching the schema. Return only the JSON object.",
-              },
-              {
-                role: "user",
-                content: `Job Title: ${input.jobTitle}
-Experience Level: ${input.experienceLevel || "Not specified"}
-Target Market: ${input.market || "Global"}
-User Background/Highlights: ${input.experienceDetails || "Not specified"}
-${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}`,
-              },
-            ],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "parsed_resume",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    header: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string" },
-                        email: { type: "string" },
-                        phone: { type: "string" },
-                        location: { type: "string" },
-                        links: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              label: { type: "string" },
-                              url: { type: "string" },
-                            },
-                            required: ["label", "url"],
-                          },
-                        },
-                      },
-                      required: ["name", "email", "phone", "location", "links"],
-                    },
-                    summary: { type: "string" },
-                    skills: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          category: { type: "string" },
-                          skills: { type: "array", items: { type: "string" } },
-                        },
-                        required: ["category", "skills"],
-                      },
-                    },
-                    experiences: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          company: { type: "string" },
-                          role: { type: "string" },
-                          startDate: { type: "string" },
-                          endDate: { type: "string" },
-                          current: { type: "boolean" },
-                          description: { type: "array", items: { type: "string" } },
-                        },
-                        required: ["id", "company", "role", "startDate", "endDate", "current", "description"],
-                      },
-                    },
-                    projects: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          name: { type: "string" },
-                          description: { type: "string" },
-                          technologies: { type: "array", items: { type: "string" } },
-                          link: { type: "string" },
-                          date: { type: "string" },
-                        },
-                        required: ["id", "name", "description", "technologies", "link", "date"],
-                      },
-                    },
-                    educations: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          institution: { type: "string" },
-                          degree: { type: "string" },
-                          field: { type: "string" },
-                          graduationDate: { type: "string" },
-                          gpa: { type: "string" },
-                        },
-                        required: ["id", "institution", "degree", "field", "graduationDate", "gpa"],
-                      },
-                    },
-                    certifications: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          name: { type: "string" },
-                          issuer: { type: "string" },
-                          date: { type: "string" },
-                          link: { type: "string" },
-                        },
-                        required: ["id", "name", "issuer", "date", "link"],
-                      },
-                    },
-                    languages: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          language: { type: "string" },
-                          proficiency: { type: "string" },
-                        },
-                        required: ["language", "proficiency"],
-                      },
-                    },
-                    achievements: { type: "array", items: { type: "string" } },
-                    publications: { type: "array", items: { type: "string" } },
-                    references: { type: "array", items: { type: "string" } },
-                  },
-                  required: [
-                    "header",
-                    "summary",
-                    "skills",
-                    "experiences",
-                    "projects",
-                    "educations",
-                    "certifications",
-                    "languages",
-                    "achievements",
-                    "publications",
-                    "references"
-                  ],
-                },
-              },
-          },
-          model: "gpt-4o",
-          temperature: 0.6,
-        });
-
-          const content = response.choices[0]?.message.content;
-          if (!content || typeof content !== "string") throw new Error("Failed to generate content from AI");
-
-          const parsed = JSON.parse(content);
-
-          // Validate the generated content — strip AI hallucinations, placeholders, and empty data
-          const validated = validateGeneratedResume(parsed);
-
-          // If after validation the resume has no real content, throw a clear error
-          const hasRealContent =
-            validated.header?.name ||
-            validated.summary ||
-            validated.skills?.length > 0 ||
-            validated.experiences?.length > 0 ||
-            validated.projects?.length > 0 ||
-            validated.educations?.length > 0;
-
-          if (!hasRealContent) {
-            throw new Error(
-              "AI generation produced no valid content from your background details. " +
-              "Please provide more specific information about your experience, skills, and background."
-            );
-          }
-
-          return validated;
+          const opts = await resolveTrackedAiOpts(ctx);
+          const result = await runResumePipeline(
+            {
+              sourceText: input.experienceDetails || "",
+              jobTitle: input.jobTitle,
+              jobDescription: input.jobDescription,
+              market: input.market,
+              experienceLevel: input.experienceLevel,
+            },
+            opts,
+            async (stage) => {
+              await updateBuildStage(build!.id, stage);
+            }
+          );
+          await updateBuildStage(build.id, "done");
+          return { ...result, buildId: build.id };
         } catch (error: any) {
           console.error("AI Generation error:", error);
-          // NEVER return fabricated data — throw a real error instead
-          throw new Error(
-            `Resume generation failed: ${error?.message || "Unknown error"}. ` +
-            "Please check that your API keys are configured correctly in the .env file and try again, " +
-            "or use the 'Create from scratch' option to build your resume manually."
-          );
+          await releaseBuildCredit(userId, build.id);
+          await updateBuildStage(build.id, "failed", {
+            errorMessage: error?.message || "Generation failed",
+          });
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              `We hit a snag on the AI pipeline — no credit used. ` +
+              `${error?.message || "Please try again."}`,
+          });
         }
       }),
 
-    generateSuggestions: publicProcedure
+    generateSuggestions: aiProcedure
       .input(z.object({
         resumeId: z.string().optional(),
         resumeContent: z.string().optional(), // Fallback raw JSON string
@@ -401,7 +396,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return generateResumeSuggestions(resumeObj, input.jobDescription);
       }),
 
-    improveBullets: publicProcedure
+    improveBullets: aiProcedure
       .input(z.object({
         role: z.string(),
         company: z.string(),
@@ -412,7 +407,8 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         jobTitle: z.string().optional(),
         targetRole: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const opts = await resolveTrackedAiOpts(ctx);
         return improveBulletPoints(
           input.role,
           input.company,
@@ -421,11 +417,12 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
           input.countryCode,
           input.targetCountryCode,
           input.jobTitle,
-          input.targetRole
+          input.targetRole,
+          opts
         );
       }),
 
-    improveSummary: publicProcedure
+    improveSummary: aiProcedure
       .input(z.object({
         currentSummary: z.string(),
         jobDescription: z.string(),
@@ -434,18 +431,20 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         countryCode: z.string().optional(),
         targetCountryCode: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const opts = await resolveTrackedAiOpts(ctx);
         return improveSummary(
           input.currentSummary,
           input.jobDescription,
           input.jobTitle,
           input.countryCode,
           input.targetCountryCode,
-          input.targetRole
+          input.targetRole,
+          opts
         );
       }),
 
-    improveProjectBullets: publicProcedure
+    improveProjectBullets: aiProcedure
       .input(z.object({
         projectName: z.string(),
         stack: z.array(z.string()),
@@ -453,17 +452,19 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         jobDescription: z.string(),
         targetRole: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const opts = await resolveTrackedAiOpts(ctx);
         return improveProjectBullets(
           input.projectName,
           input.stack,
           input.currentBullets,
           input.jobDescription,
-          input.targetRole
+          input.targetRole,
+          opts
         );
       }),
 
-    generateCoverLetter: publicProcedure
+    generateCoverLetter: aiProcedure
       .input(z.object({
         name: z.string(),
         targetRole: z.string(),
@@ -478,7 +479,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return generateCoverLetter(input);
       }),
 
-    generateLinkedInAbout: publicProcedure
+    generateLinkedInAbout: aiProcedure
       .input(z.object({
         summary: z.string(),
         jobTitle: z.string(),
@@ -489,7 +490,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return generateLinkedInAbout(input);
       }),
 
-    calculateScore: publicProcedure
+    calculateScore: aiProcedure
       .input(z.object({
         resumeContent: z.string(),
         jobDescription: z.string(),
@@ -499,7 +500,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return calculateKeywordAlignment(resumeObj, input.jobDescription);
       }),
 
-    atsAudit: publicProcedure
+    atsAudit: aiProcedure
       .input(z.object({
         resumeText: z.string(),
         jobDescription: z.string(),
@@ -508,7 +509,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return atsAudit(input.resumeText, input.jobDescription);
       }),
 
-    generateInterviewQuestions: publicProcedure
+    generateInterviewQuestions: aiProcedure
       .input(z.object({
         resumeText: z.string(),
         jobDescription: z.string(),
@@ -517,7 +518,7 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
         return generateInterviewQuestions(input.resumeText, input.jobDescription);
       }),
 
-    generateRecruiterOutreach: publicProcedure
+    generateRecruiterOutreach: aiProcedure
       .input(z.object({
         topSkills: z.string(),
         mostRecentRole: z.string(),
@@ -528,131 +529,162 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
       .mutation(async ({ input }) => {
         return generateRecruiterOutreach(input);
       }),
-  }),
 
-  // SaaS: Organization Router
-  organization: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return db.getUserOrganizations(ctx.user.id);
-    }),
-    create: protectedProcedure
-      .input(z.object({ name: z.string(), slug: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const id = nanoid();
-        const org = await db.createOrganization({
-          id,
-          name: input.name,
-          slug: input.slug,
-          primaryColor: "#1e40af",
-          secondaryColor: "#0d9488",
-          logoUrl: "https://www.hexastacksolutions.com/logo.png",
-          customDomain: `${input.slug}.hexacv.com`
-        });
-        await db.addOrganizationMember({
-          id: nanoid(),
-          organizationId: id,
-          userId: ctx.user.id,
-          role: "owner"
-        });
-        return org;
-      }),
-    update: protectedProcedure
+    /** C5 — thumbs up/down on AI rewrite quality */
+    submitEvaluation: aiProcedure
       .input(z.object({
-        id: z.string(),
-        name: z.string().optional(),
-        logoUrl: z.string().optional(),
-        primaryColor: z.string().optional(),
-        secondaryColor: z.string().optional(),
-        customDomain: z.string().optional()
+        resumeId: z.string().optional(),
+        stage: z.string().default("rewrite"),
+        rating: z.enum(["up", "down"]),
+        note: z.string().optional(),
+        overallScore: z.number().int().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const members = await db.getOrganizationMembers(input.id);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to update organization");
+        if (ctx.user?.evaluationOptOut) {
+          return { skipped: true as const, reason: "evaluation_opt_out" as const };
         }
-        return db.updateOrganization(input.id, input);
-      }),
-    members: protectedProcedure
-      .input(z.object({ orgId: z.string() }))
-      .query(async ({ input, ctx }) => {
-        const members = await db.getOrganizationMembers(input.orgId);
-        const isMember = members.some(m => m.userId === ctx.user.id);
-        if (!isMember) {
-          throw new Error("Unauthorized to view members");
-        }
-        return members;
-      }),
-    invite: protectedProcedure
-      .input(z.object({ orgId: z.string(), email: z.string(), role: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const members = await db.getOrganizationMembers(input.orgId);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to invite members");
-        }
-        const invitee = db.mockDb.users.find(u => u.email === input.email);
-        if (!invitee) {
-          throw new Error("No HexaCv user found with that email yet. Have them sign in once first!");
-        }
-        return db.addOrganizationMember({
-          id: nanoid(),
-          organizationId: input.orgId,
-          userId: invitee.id,
-          role: input.role
+        const { insertResumeEvaluation, getActivePrompt } = await import(
+          "./promptVersions"
+        );
+        const active = await getActivePrompt(input.stage);
+        return insertResumeEvaluation({
+          userId: ctx.user?.id ?? null,
+          resumeId: input.resumeId ?? null,
+          stage: input.stage,
+          promptVersionId: active?.id ?? null,
+          rating: input.rating,
+          note: input.note ?? null,
+          overallScore: input.overallScore ?? null,
         });
       }),
-    removeMember: protectedProcedure
-      .input(z.object({ orgId: z.string(), memberId: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const members = await db.getOrganizationMembers(input.orgId);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to remove members");
-        }
-        return db.removeOrganizationMember(input.orgId, input.memberId);
-      })
-  }),
+  });
+  })(),
 
-  // SaaS: Marketplace Router
-  marketplace: router({
-    list: publicProcedure
-      .input(z.object({ type: z.string().optional() }))
-      .query(async ({ input }) => {
-        return db.listMarketplaceItems(input.type);
-      }),
-    publish: protectedProcedure
-      .input(z.object({
-        title: z.string(),
-        description: z.string(),
-        type: z.string(),
-        content: z.string(),
-        price: z.number(),
-        isPremium: z.boolean()
-      }))
-      .mutation(async ({ input, ctx }) => {
-        return db.createMarketplaceItem({
-          id: nanoid(),
-          authorId: ctx.user.id,
-          title: input.title,
-          description: input.description,
-          type: input.type,
-          content: input.content,
-          price: input.price,
-          isPremium: input.isPremium
-        });
-      }),
-    download: publicProcedure
-      .input(z.object({ id: z.string() }))
-      .mutation(async ({ input }) => {
-        return db.incrementDownloads(input.id);
-      }),
-    rate: protectedProcedure
-      .input(z.object({ id: z.string(), rating: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        return db.rateMarketplaceItem(input.id, input.rating);
-      })
-  }),
+// PRUNED — not in V6 scope, see ARCHITECTURE.md scope question
+//   // SaaS: Organization Router
+//   organization: router({
+//     list: protectedProcedure.query(async ({ ctx }) => {
+//       return db.getUserOrganizations(ctx.user.id);
+//     }),
+//     create: protectedProcedure
+//       .input(z.object({ name: z.string(), slug: z.string() }))
+//       .mutation(async ({ input, ctx }) => {
+//         const id = nanoid();
+//         const org = await db.createOrganization({
+//           id,
+//           name: input.name,
+//           slug: input.slug,
+//           primaryColor: "#1e40af",
+//           secondaryColor: "#0d9488",
+//           logoUrl: "https://www.hexastacksolutions.com/logo.png",
+//           customDomain: `${input.slug}.hexacv.com`
+//         });
+//         await db.addOrganizationMember({
+//           id: nanoid(),
+//           organizationId: id,
+//           userId: ctx.user.id,
+//           role: "owner"
+//         });
+//         return org;
+//       }),
+//     update: protectedProcedure
+//       .input(z.object({
+//         id: z.string(),
+//         name: z.string().optional(),
+//         logoUrl: z.string().optional(),
+//         primaryColor: z.string().optional(),
+//         secondaryColor: z.string().optional(),
+//         customDomain: z.string().optional()
+//       }))
+//       .mutation(async ({ input, ctx }) => {
+//         const members = await db.getOrganizationMembers(input.id);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to update organization");
+//         }
+//         return db.updateOrganization(input.id, input);
+//       }),
+//     members: protectedProcedure
+//       .input(z.object({ orgId: z.string() }))
+//       .query(async ({ input, ctx }) => {
+//         const members = await db.getOrganizationMembers(input.orgId);
+//         const isMember = members.some(m => m.userId === ctx.user.id);
+//         if (!isMember) {
+//           throw new Error("Unauthorized to view members");
+//         }
+//         return members;
+//       }),
+//     invite: protectedProcedure
+//       .input(z.object({ orgId: z.string(), email: z.string(), role: z.string() }))
+//       .mutation(async ({ input, ctx }) => {
+//         const members = await db.getOrganizationMembers(input.orgId);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to invite members");
+//         }
+//         const invitee = db.mockDb.users.find(u => u.email === input.email);
+//         if (!invitee) {
+//           throw new Error("No HexaCv user found with that email yet. Have them sign in once first!");
+//         }
+//         return db.addOrganizationMember({
+//           id: nanoid(),
+//           organizationId: input.orgId,
+//           userId: invitee.id,
+//           role: input.role
+//         });
+//       }),
+//     removeMember: protectedProcedure
+//       .input(z.object({ orgId: z.string(), memberId: z.string() }))
+//       .mutation(async ({ input, ctx }) => {
+//         const members = await db.getOrganizationMembers(input.orgId);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to remove members");
+//         }
+//         return db.removeOrganizationMember(input.orgId, input.memberId);
+//       })
+//   }),
+
+// PRUNED — not in V6 scope, see ARCHITECTURE.md scope question
+//   // SaaS: Marketplace Router
+//   marketplace: router({
+//     list: publicProcedure
+//       .input(z.object({ type: z.string().optional() }))
+//       .query(async ({ input }) => {
+//         return db.listMarketplaceItems(input.type);
+//       }),
+//     publish: protectedProcedure
+//       .input(z.object({
+//         title: z.string(),
+//         description: z.string(),
+//         type: z.string(),
+//         content: z.string(),
+//         price: z.number(),
+//         isPremium: z.boolean()
+//       }))
+//       .mutation(async ({ input, ctx }) => {
+//         return db.createMarketplaceItem({
+//           id: nanoid(),
+//           authorId: ctx.user.id,
+//           title: input.title,
+//           description: input.description,
+//           type: input.type,
+//           content: input.content,
+//           price: input.price,
+//           isPremium: input.isPremium
+//         });
+//       }),
+//     download: publicProcedure
+//       .input(z.object({ id: z.string() }))
+//       .mutation(async ({ input }) => {
+//         return db.incrementDownloads(input.id);
+//       }),
+//     rate: protectedProcedure
+//       .input(z.object({ id: z.string(), rating: z.number() }))
+//       .mutation(async ({ input, ctx }) => {
+//         return db.rateMarketplaceItem(input.id, input.rating);
+//       })
+//   }),
 
   // SaaS: Affiliate Router
   affiliate: router({
@@ -666,154 +698,170 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
       })
   }),
 
-  // SaaS: Recruiter Router
-  recruiter: router({
-    createJob: protectedProcedure
-      .input(z.object({
-        orgId: z.string(),
-        title: z.string(),
-        description: z.string(),
-        requirements: z.string()
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const members = await db.getOrganizationMembers(input.orgId);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to create job for this organization");
-        }
-        return db.createRecruiterJob({
-          id: nanoid(),
-          organizationId: input.orgId,
-          title: input.title,
-          description: input.description,
-          requirements: input.requirements
-        });
-      }),
-    listJobs: publicProcedure
-      .input(z.object({ orgId: z.string().optional() }))
-      .query(async ({ input }) => {
-        return db.listRecruiterJobs(input.orgId);
-      }),
-    listApplications: protectedProcedure
-      .input(z.object({ jobId: z.string() }))
-      .query(async ({ input, ctx }) => {
-        const job = await db.getRecruiterJob(input.jobId);
-        if (!job) throw new Error("Recruiter job vacancy not found");
-        const members = await db.getOrganizationMembers(job.organizationId);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to view applications for this vacancy");
-        }
-        return db.listJobApplications(input.jobId);
-      }),
-    submitApplication: publicProcedure
-      .input(z.object({
-        jobId: z.string(),
-        applicantName: z.string(),
-        applicantEmail: z.string(),
-        resumeContent: z.string()
-      }))
-      .mutation(async ({ input }) => {
-        const job = await db.getRecruiterJob(input.jobId);
-        if (!job) throw new Error("Recruiter job listing not found");
-        
-        let parsedResume: any;
-        try {
-          parsedResume = JSON.parse(input.resumeContent);
-        } catch {
-          // fallback mock resume structure if plain text is submitted
-          parsedResume = {
-            sections: [
-              { type: "skills", content: { skills: [{ category: "Skills", skills: input.resumeContent.split(/\s*,\s*/) }] } },
-              { type: "experience", content: { experiences: [{ role: "Candidate", company: "General", description: [input.resumeContent] }] } }
-            ]
-          };
-        }
+// PRUNED — not in V6 scope, see ARCHITECTURE.md scope question
+//   // SaaS: Recruiter Router
+//   recruiter: router({
+//     createJob: protectedProcedure
+//       .input(z.object({
+//         orgId: z.string(),
+//         title: z.string(),
+//         description: z.string(),
+//         requirements: z.string()
+//       }))
+//       .mutation(async ({ input, ctx }) => {
+//         const members = await db.getOrganizationMembers(input.orgId);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to create job for this organization");
+//         }
+//         return db.createRecruiterJob({
+//           id: nanoid(),
+//           organizationId: input.orgId,
+//           title: input.title,
+//           description: input.description,
+//           requirements: input.requirements
+//         });
+//       }),
+//     listJobs: publicProcedure
+//       .input(z.object({ orgId: z.string().optional() }))
+//       .query(async ({ input }) => {
+//         return db.listRecruiterJobs(input.orgId);
+//       }),
+//     listApplications: protectedProcedure
+//       .input(z.object({ jobId: z.string() }))
+//       .query(async ({ input, ctx }) => {
+//         const job = await db.getRecruiterJob(input.jobId);
+//         if (!job) throw new Error("Recruiter job vacancy not found");
+//         const members = await db.getOrganizationMembers(job.organizationId);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to view applications for this vacancy");
+//         }
+//         return db.listJobApplications(input.jobId);
+//       }),
+//     submitApplication: publicProcedure
+//       .input(z.object({
+//         jobId: z.string(),
+//         applicantName: z.string(),
+//         applicantEmail: z.string(),
+//         resumeContent: z.string()
+//       }))
+//       .mutation(async ({ input }) => {
+//         const job = await db.getRecruiterJob(input.jobId);
+//         if (!job) throw new Error("Recruiter job listing not found");
+//
+//         let parsedResume: any;
+//         try {
+//           parsedResume = JSON.parse(input.resumeContent);
+//         } catch {
+//           // fallback mock resume structure if plain text is submitted
+//           parsedResume = {
+//             sections: [
+//               { type: "skills", content: { skills: [{ category: "Skills", skills: input.resumeContent.split(/\s*,\s*/) }] } },
+//               { type: "experience", content: { experiences: [{ role: "Candidate", company: "General", description: [input.resumeContent] }] } }
+//             ]
+//           };
+//         }
+//
+//         const scoreObj = await calculateKeywordAlignment(parsedResume, job.requirements);
+//         return db.createJobApplication({
+//           id: nanoid(),
+//           jobId: input.jobId,
+//           applicantName: input.applicantName,
+//           applicantEmail: input.applicantEmail,
+//           matchScore: scoreObj.score,
+//           resumeContent: input.resumeContent,
+//           status: "pending"
+//         });
+//       }),
+//     updateStatus: protectedProcedure
+//       .input(z.object({ id: z.string(), status: z.string() }))
+//       .mutation(async ({ input, ctx }) => {
+//         const app = await db.getJobApplication(input.id);
+//         if (!app) throw new Error("Application not found");
+//         const job = await db.getRecruiterJob(app.jobId);
+//         if (!job) throw new Error("Recruiter job vacancy not found");
+//         const members = await db.getOrganizationMembers(job.organizationId);
+//         const caller = members.find(m => m.userId === ctx.user.id);
+//         if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
+//           throw new Error("Unauthorized to modify application status");
+//         }
+//         return db.updateApplicationStatus(input.id, input.status);
+//       })
+//   }),
 
-        const scoreObj = await calculateKeywordAlignment(parsedResume, job.requirements);
-        return db.createJobApplication({
-          id: nanoid(),
-          jobId: input.jobId,
-          applicantName: input.applicantName,
-          applicantEmail: input.applicantEmail,
-          matchScore: scoreObj.score,
-          resumeContent: input.resumeContent,
-          status: "pending"
-        });
-      }),
-    updateStatus: protectedProcedure
-      .input(z.object({ id: z.string(), status: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const app = await db.getJobApplication(input.id);
-        if (!app) throw new Error("Application not found");
-        const job = await db.getRecruiterJob(app.jobId);
-        if (!job) throw new Error("Recruiter job vacancy not found");
-        const members = await db.getOrganizationMembers(job.organizationId);
-        const caller = members.find(m => m.userId === ctx.user.id);
-        if (!caller || (caller.role !== 'owner' && caller.role !== 'recruiter' && caller.role !== 'admin')) {
-          throw new Error("Unauthorized to modify application status");
-        }
-        return db.updateApplicationStatus(input.id, input.status);
-      })
-  }),
-
-  // SaaS: Billing & Support Router
+  // SaaS: Billing & Support Router (Razorpay only)
   billing: router({
     getSubscription: protectedProcedure.query(async ({ ctx }) => {
       return db.getSubscription(ctx.user.id);
+    }),
+
+    getPaymentProvider: protectedProcedure.query(async () => {
+      return { provider: getPaymentProvider() };
     }),
     
     createCheckoutSession: protectedProcedure
       .input(z.object({ tier: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        if (process.env.STRIPE_SECRET_KEY) {
-          try {
-            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" as any });
-            const origin = ctx.req.headers.origin || "http://localhost:3000";
-            const session = await stripe.checkout.sessions.create({
-              payment_method_types: ["card"],
-              line_items: [{
-                price_data: {
-                  currency: "usd",
-                  product_data: {
-                    name: `HexaCv ${input.tier.toUpperCase()} Plan`,
-                    description: `Access to HexaCv ${input.tier} features`,
-                  },
-                  unit_amount: input.tier === "pro" ? 1900 : input.tier === "enterprise" ? 9900 : 0,
-                  recurring: { interval: "month" },
-                },
-                quantity: 1,
-              }],
-              mode: "subscription",
-              success_url: `${origin}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}&status=success`,
-              cancel_url: `${origin}/dashboard/billing?status=cancel`,
-              metadata: {
-                userId: ctx.user.id.toString(),
-                tier: input.tier,
-              }
-            });
-            return { url: session.url };
-          } catch (e: any) {
-            console.error("Stripe session creation error:", e);
-            throw new Error(`Stripe session creation failed: ${e.message}`);
-          }
-        } else {
-          // Fall back to simulated checkout simulation page
-          return { url: `/dashboard/billing/checkout?tier=${input.tier}` };
+        const tier = input.tier.toLowerCase();
+        if (tier === "free") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot checkout free tier" });
+        }
+        // V6: "build" = ₹99 one-time credit; pro/enterprise kept for legacy
+
+        try {
+          const order = await createRazorpayOrder({
+            userId: ctx.user.id,
+            tier,
+          });
+          return {
+            provider: "razorpay" as const,
+            keyId: order.keyId,
+            orderId: order.orderId,
+            amount: order.amount,
+            currency: order.currency,
+            tier: order.tier,
+            paymentOrderId: order.paymentOrderId,
+            sandbox: order.sandbox,
+            url: null as string | null,
+          };
+        } catch (e: any) {
+          console.error("Razorpay order creation error:", e);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Razorpay order failed: ${e.message}`,
+          });
         }
       }),
 
-    upgradePlan: protectedProcedure
-      .input(z.object({ tier: z.string() }))
+    verifyRazorpayPayment: protectedProcedure
+      .input(
+        z.object({
+          orderId: z.string().min(1),
+          paymentId: z.string().min(1),
+          signature: z.string().min(1),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
-        const sub = await db.updateSubscription(ctx.user.id, input.tier);
-        // reward affiliate if they converted
-        if (ctx.user.email) {
-          const price = input.tier === "enterprise" ? 9900 : input.tier === "pro" ? 1900 : 0;
-          await db.rewardReferralConversion(ctx.user.email, ctx.user.id, price);
+        try {
+          const result = await verifyAndFulfillCheckout({
+            userId: ctx.user.id,
+            orderId: input.orderId,
+            paymentId: input.paymentId,
+            signature: input.signature,
+          });
+          return {
+            ok: true,
+            duplicate: result.duplicate,
+            tier: result.order?.tier,
+          };
+        } catch (e: any) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: e.message || "Payment verification failed",
+          });
         }
-        return sub;
-      })
+      }),
   }),
 
   support: router({
@@ -878,6 +926,117 @@ ${input.jobDescription ? `Target Job Description: ${input.jobDescription}` : ""}
       .input(z.object({ keyName: z.string() }))
       .mutation(async ({ input }) => {
         return testApiKeyFunc(input.keyName);
+      }),
+
+    getUsageStats: adminProcedure.query(async () => {
+      return buildAdminUsageStats();
+    }),
+
+    setModelRoute: adminProcedure
+      .input(
+        z.object({
+          id: z.string().optional(),
+          stage: z.string().min(1),
+          tier: z.string().min(1),
+          provider: z.string().min(1),
+          model: z.string().min(1),
+          rpmLimit: z.number().int().positive(),
+          rpdLimit: z.number().int().positive(),
+          priority: z.number().int(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const updatedBy =
+          ctx.user.email || ctx.user.openId || `user-${ctx.user.id}`;
+        const row = await upsertModelRoute({ ...input, updatedBy });
+        return { success: true as const, route: row };
+      }),
+
+    setAiPaused: adminProcedure
+      .input(z.object({ paused: z.boolean() }))
+      .mutation(async ({ input }) => {
+        saveApiKey("AI_PAUSED", input.paused ? "true" : "false");
+        return { success: true as const, aiPaused: isAiPaused() };
+      }),
+
+    /** Manual tier grant — admin only. Paid upgrades otherwise go through Razorpay fulfill. */
+    manualGrantSubscription: adminProcedure
+      .input(
+        z.object({
+          userId: z.number().int().positive(),
+          tier: z.string().min(1),
+          reason: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        console.log(
+          `[Admin] manualGrantSubscription by user=${ctx.user.id} target=${input.userId} tier=${input.tier} reason=${input.reason}`
+        );
+        const sub = await db.updateSubscription(input.userId, input.tier);
+        const price =
+          input.tier === "enterprise" ? 9900 : input.tier === "pro" ? 1900 : 0;
+        if (price > 0) {
+          const crmUsers = await db.getCRMUsersList();
+          const target = crmUsers.find(u => u.id === input.userId);
+          if (target?.email) {
+            await db.rewardReferralConversion(target.email, input.userId, price);
+          }
+        }
+        return sub;
+      }),
+
+    setUserRole: adminProcedure
+      .input(
+        z.object({
+          userId: z.number().int().positive(),
+          role: z.enum(["user", "admin"]),
+          reason: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (input.userId === ctx.user.id && input.role === "user") {
+          const adminCount = await db.countAdmins();
+          if (adminCount <= 1) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Cannot demote the only remaining admin",
+            });
+          }
+        }
+        console.log(
+          `[Admin] setUserRole by user=${ctx.user.id} target=${input.userId} role=${input.role} reason=${input.reason}`
+        );
+        const updated = await db.setUserRole(input.userId, input.role);
+        if (!updated) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        }
+        return updated;
+      }),
+
+    listPaymentOrders: adminProcedure.query(async () => {
+      return listPaymentOrders(100);
+    }),
+
+    refundPayment: adminProcedure
+      .input(
+        z.object({
+          paymentOrderId: z.string().min(1),
+          reason: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        try {
+          return await adminRefundPaymentOrder({
+            paymentOrderId: input.paymentOrderId,
+            reason: input.reason,
+            adminUserId: ctx.user.id,
+          });
+        } catch (e: any) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: e?.message || "Refund failed",
+          });
+        }
       }),
   }),
 });
